@@ -78,10 +78,12 @@ int main() {
     
     while(1) {
         
-        // read pushbutton
-        //  while(PORTBbits.RB4 = )
-            
-                       
+        // read pushbutton-if pushed, turn off LED and wait 
+        while(PORTBbits.RB4 == 0) {     // when pushed, input is LO
+            LATAbits.LATA4 = 0;         // set RA4 lo, turn off LED
+            ;
+        }
+                                   
         // set core timer to 0
         _CP0_SET_COUNT(0);
         
@@ -104,8 +106,6 @@ int main() {
             ;
         }
         
-	    // use _CP0_SET_COUNT(0) and _CP0_GET_COUNT() to test the PIC timing
-		// remember the core timer runs at half the CPU speed
     }
     
     
