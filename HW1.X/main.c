@@ -9,8 +9,8 @@
  */
 
 
-#include<xc.h>           // processor SFR definitions
-#include<sys/attribs.h>  // __ISR macro
+#include <xc.h>           // processor SFR definitions
+#include <sys/attribs.h>  // __ISR macro
 
 // Define DEVCFG registers
 // Refer to: /Microchip/xc32/v1.40/docs/config_docs/32mx250f128b.html
@@ -52,7 +52,7 @@
 
 
 int main() {
-
+   
     __builtin_disable_interrupts();
 
     // set the CP0 CONFIG register to indicate that kseg0 is cacheable (0x3)
@@ -66,14 +66,37 @@ int main() {
 
     // disable JTAG to get pins back
     DDPCONbits.JTAGEN = 0;
+       
+    // initialize pushbutton pin 11 as input pin
+    TRISBbits.TRISB4 = 1;
     
-    // do your TRIS and LAT commands here
+    // initialize LED pin 12 as an output that is on
+    TRISAbits.TRISA4 = 0;
+    LATAbits.LATA4 = 1;
     
     __builtin_enable_interrupts();
     
-    while(1) {
+    while(1) {;/*
+        // read pushbutton
+        ????????????
+            
+               
+         // turn on LED, set RA4 hi
+        LATAbits.LATA4 = 1;
+        
+        // set core timer to 0
+        _CP0_SET_COUNT(0);
+               
+        // delay for 0.5 mS, 10,000 ticks   DOUBLE CHECK THIS!
+        while(_CP0_GET_COUNT() < 10000) {
+            ;
+        }
+        
+        // turn off LED, set RA4 lo
+        LATAbits.LATA4 = 0;        
+    
 	    // use _CP0_SET_COUNT(0) and _CP0_GET_COUNT() to test the PIC timing
-		// remember the core timer runs at half the CPU speed
+		// remember the core timer runs at half the CPU speed*/
     }
     
     
