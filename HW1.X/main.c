@@ -77,27 +77,35 @@ int main() {
     __builtin_enable_interrupts();
     
     while(1) {
-        ;/*
-        // read pushbutton
-          while(PORTBbits.RB4 = )
-            
-               
-         // turn on LED, set RA4 hi
-        LATAbits.LATA4 = 1;
         
+        // read pushbutton
+        //  while(PORTBbits.RB4 = )
+            
+                       
         // set core timer to 0
         _CP0_SET_COUNT(0);
-               
-        // delay for 0.5 mS, 10,000 ticks   DOUBLE CHECK THIS!
-        while(_CP0_GET_COUNT() < 10000) {
+        
+        // turn on LED, set RA4 hi
+        LATAbits.LATA4 = 1;
+                       
+        // delay for 0.5 mS, 10,000 x 2 = 20,000 ticks   
+        while(_CP0_GET_COUNT() < 20000) {
             ;
         }
         
         // turn off LED, set RA4 lo
         LATAbits.LATA4 = 0;        
     
+        // set core timer to 0
+        _CP0_SET_COUNT(0);
+        
+        // delay for 0.5 mS
+        while(_CP0_GET_COUNT() < 20000) {
+            ;
+        }
+        
 	    // use _CP0_SET_COUNT(0) and _CP0_GET_COUNT() to test the PIC timing
-		// remember the core timer runs at half the CPU speed*/
+		// remember the core timer runs at half the CPU speed
     }
     
     
