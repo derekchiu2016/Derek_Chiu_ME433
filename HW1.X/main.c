@@ -76,9 +76,10 @@ int main() {
     
     __builtin_enable_interrupts();
     
-    while(1) {;/*
+    while(1) {
+        ;/*
         // read pushbutton
-        ????????????
+          while(PORTBbits.RB4 = )
             
                
          // turn on LED, set RA4 hi
