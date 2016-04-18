@@ -124,6 +124,10 @@ void initSPI1() {
     // is ending (set CS high)
     TRISAbits.TRISA0 = 0;
     CS = 1;
+    
+    // Pin functions, select a pin for SDI/SDO                                   
+    SDI1Rbits.SDI1R = 0;        // set A1 as SDI
+    RPA1Rbits.RPA1R = 0b0011;   // set SDO1 as A1  
 
     // Master - SPI1, pins are: SDI(A1), SDO(), SCK1(25)
     // we manually control SS as a digital output 
@@ -137,21 +141,17 @@ void initSPI1() {
     SPI1CONbits.CKE = 1;      // data changes when clock goes from hi to lo (since CKP is 0)
     SPI1CONbits.MSTEN = 1;    // master operation
     SPI1CONbits.ON = 1;       // turn on spi 1
-
-                            // send a ram set status command.
-    CS = 0;                   // select the SPI chip as slave
-    spi_io(0b0111)             // write to DAC_A        -----WHAT GOES IN BITS D7-D0?
-    spi_io(0b1111);             // write to DAC_B       -----IS THIS CORRECT DIRECTION?  BIT 15...0?
-    CS = 1;                   // finish the command
-  
-    // Pin functions                                    -----WHERE DO YOU PUT THESE??
-    SDI1Rbits.SDI1R = 0;        // set A1 as SDI
-    RPA1Rbits.RPA1R = 0b0011;   // set SDO1 as A1  
-            
+                
 }
        
 void setVoltage(char channel, char voltage) {
-    ;                                               // This should use char spi_io
+    char data = 0x128;       // = 1.65V
+    short to_send = data << 4;  // left shift the voltage data bits by 4
+    to_send |= (0b1111 << 11)   // left shift the initialization data bits by 11
+    CS = 0;                   // select the SPI chip as slave
+    spi_io(to_send << 8);             // send the first 8 bits to SDI
+    spi_io(to_send);             // send the remaining 8 bits to SDI
+    CS = 1;                   // finish the command
 }  
 
 
