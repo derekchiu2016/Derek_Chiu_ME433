@@ -6,6 +6,7 @@
 
 #include <xc.h>           // processor SFR definitions
 #include <sys/attribs.h>  // __ISR macro
+#define CS LATAbits.LATA0       // chip select pin
 
 // Define DEVCFG registers
 // Refer to: /Microchip/xc32/v1.40/docs/config_docs/32mx250f128b.html
@@ -71,7 +72,12 @@ int main() {
     
     __builtin_enable_interrupts();
     
-    while(1) {
+    initSPI1();
+    
+    while(1) {      
+        
+        setVoltage(1,255);
+        setVoltage(0,128);
         
         // read pushbutton-if pushed, turn off LED and wait 
         while(PORTBbits.RB4 == 0) {     // when pushed, input is LO
@@ -99,7 +105,7 @@ int main() {
         while(_CP0_GET_COUNT() < 20000) {
             ;
         }
-        
+                        
     }
      
 }
@@ -115,14 +121,15 @@ unsigned char spi_io(unsigned char o) {
     return SPI1BUF;             // read SPI1BUF
 }     
 
-#define CS LATAbits.LATA0       // chip select pin
+
 // initialize spi1 and the ram module
 void initSPI1() {
     // set up the chip select pin (A0) as an output
     // the chip select pin is used by the sram to indicate
     // when a command is beginning (clear CS to low) and when it
     // is ending (set CS high)
-    TRISAbits.TRISA0 = 0;
+    ANSELAbits.ANSA0 = 0;       // override AN0
+    TRISAbits.TRISA0 = 0;       // set A0 as an output
     CS = 1;
     
     // Pin functions, select a pin for SDI/SDO                                   
@@ -136,22 +143,28 @@ void initSPI1() {
     // setup spi1
     SPI1CON = 0;              // turn off the spi module and reset it
     SPI1BUF;                  // clear the rx buffer by reading from it
-    SPI1BRG = 0x1;            // baud rate to 12MHz [SPI1BRG = (48MHz/(2*12MHz))-1] -- fastest possible
+    SPI1BRG = 1;            // baud rate to 12MHz [SPI1BRG = (48MHz/(2*12MHz))-1] -- fastest possible
     SPI1STATbits.SPIROV = 0;  // clear the overflow bit
     SPI1CONbits.CKE = 1;      // data changes when clock goes from hi to lo (since CKP is 0)
     SPI1CONbits.MSTEN = 1;    // master operation
     SPI1CONbits.ON = 1;       // turn on spi 1
                 
 }
-       
-void setVoltage(char channel, char voltage) {
-    char data = 0x128;       // = 1.65V
-    short to_send = data << 4;  // left shift the voltage data bits by 4
-    to_send |= (0b1111 << 11)   // left shift the initialization data bits by 11
-    CS = 0;                   // select the SPI chip as slave
-    spi_io(to_send << 8);             // send the first 8 bits to SDI
-    spi_io(to_send);             // send the remaining 8 bits to SDI
-    CS = 1;                   // finish the command
+
+// Input directions:
+// char channel: 0(A) or 1(B)
+// char voltage: 000 to 255
+void setVoltage(unsigned char channel, unsigned char voltage) {
+    
+    short to_send = 0b0000000000000000;
+    to_send |= voltage << 4;   // left shift the voltage data bits by 4
+    to_send |= (0b111 << 12);       // left shift the initialization data bits (BUF, GA, SHDN) by 12
+    to_send |= (channel << 15);     // left shift the channel select bit all the way (by 15)
+    
+    CS = 0;                         // select the SPI chip as slave
+    spi_io(to_send >> 8);           // send the first 8 bits to SDI (spi_io takes char which has 8 bits)
+    spi_io(to_send);                // send the remaining 8 bits to SDI   
+    CS = 1;                         // finish the command
 }  
 
 
@@ -162,16 +175,16 @@ void setVoltage(char channel, char voltage) {
 
 
 
-// I2C Pin Expander
-void someFunction() {
-    // Initialize pins GP0 - GP3 as outputs
-    TRISAbits.TRISA4 = 0;
-    
-    // Set pins GP0 - GP3 as off
-    LATAbits.LATA4 = 1;
-    
-    // Initialize pins GP4 - GP7 as inputs
-    TRISAbits.TRISA4 = 1;
-    LATAbits.LATA4 = 1;
-    
-}
+//// I2C Pin Expander
+//void someFunction() {
+//    // Initialize pins GP0 - GP3 as outputs
+//    TRISAbits.TRISA4 = 0;
+//    
+//    // Set pins GP0 - GP3 as off
+//    LATAbits.LATA4 = 1;
+//    
+//    // Initialize pins GP4 - GP7 as inputs
+//    TRISAbits.TRISA4 = 1;
+//    LATAbits.LATA4 = 1;
+//    
+//}
