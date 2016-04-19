@@ -4,9 +4,10 @@
 
 
 
-#include <xc.h>           // processor SFR definitions
-#include <sys/attribs.h>  // __ISR macro
-#define CS LATAbits.LATA0       // chip select pin
+#include <xc.h>             // processor SFR definitions
+#include <sys/attribs.h>    // __ISR macro
+#include <math.h>           // for sine function
+#define CS LATAbits.LATA0   // chip select pin
 
 // Define DEVCFG registers
 // Refer to: /Microchip/xc32/v1.40/docs/config_docs/32mx250f128b.html
@@ -72,26 +73,63 @@ int main() {
     
     __builtin_enable_interrupts();
     
+    // initialize SPI1
     initSPI1();
+    
+    // create arrays for sine and triangle waves 
+    float sinetemp[100];            // initialize a sine array for floating math
+    unsigned char sine[100];        // initialize a sine array to turn into ints
+    float tritemp[100];             // initialize a triangle array for floating math
+    unsigned char tri[100];         // initialize a triangle to turn into ints
+    
+    int i;
+    for (i = 0; i < 100; i++) {
+        // sin array should update values 100 times every period for a 10 Hz sine wave
+        sinetemp[i] = 255.0*((sin((i/100.0)*2.0*3.14159265)+1.0)/2.0);
+        sine[i] = (unsigned char) sinetemp[i];      // cast result into integer       
+        
+        // triangle array should update values 100 times every period for a 10 Hz tri wave
+        tritemp[i] = 255.0*(i/99.0);                           
+        tri[i] = (unsigned char) tritemp[i];        // cast result into integer
+    }
+    
     
     while(1) {      
         
-        setVoltage(1,255);
-        setVoltage(0,128);
+             
+        // send values to SPI to return voltage values for sine and triangle waves
+        int j;
+        for (j = 0; j < 100; j++) {
+            setVoltage(0,sine[j]);
+            setVoltage(1,tri[j]);
+            
+            // to make the waves run at 10 Hz, use the core timer
+            // set core timer to 0
+            _CP0_SET_COUNT(0);
+            
+            // delay for 1mS (100 values * 1ms = 0.1s = 10 Hz wave)
+            while(_CP0_GET_COUNT() < 24000) {
+                ;
+            }  
+            
+        }
         
+
+/*      HOMEWORK 1 FLASHING LED
+  
+        // set core timer to 0
+        _CP0_SET_COUNT(0);
+         
         // read pushbutton-if pushed, turn off LED and wait 
         while(PORTBbits.RB4 == 0) {     // when pushed, input is LO
             LATAbits.LATA4 = 0;         // set RA4 lo, turn off LED
-        }
-                                   
-        // set core timer to 0
-        _CP0_SET_COUNT(0);
-        
+        }                         
+
         // turn on LED, set RA4 hi
         LATAbits.LATA4 = 1;
                        
-        // delay for 0.5 mS, 10,000 x 2 = 20,000 ticks   
-        while(_CP0_GET_COUNT() < 20000) {
+        // delay for 0.5 mS, 24,000,000 / 2000   
+        while(_CP0_GET_COUNT() < 12000) {
             ;
         }
         
@@ -102,10 +140,10 @@ int main() {
         _CP0_SET_COUNT(0);
         
         // delay for 0.5 mS
-        while(_CP0_GET_COUNT() < 20000) {
+        while(_CP0_GET_COUNT() < 12000) {
             ;
-        }
-                        
+        }                                       */
+                      
     }
      
 }
@@ -143,7 +181,7 @@ void initSPI1() {
     // setup spi1
     SPI1CON = 0;              // turn off the spi module and reset it
     SPI1BUF;                  // clear the rx buffer by reading from it
-    SPI1BRG = 1;            // baud rate to 12MHz [SPI1BRG = (48MHz/(2*12MHz))-1] -- fastest possible
+    SPI1BRG = 300;              // baud rate to 12MHz [SPI1BRG = (48MHz/(2*12MHz))-1] -- fastest possible
     SPI1STATbits.SPIROV = 0;  // clear the overflow bit
     SPI1CONbits.CKE = 1;      // data changes when clock goes from hi to lo (since CKP is 0)
     SPI1CONbits.MSTEN = 1;    // master operation
@@ -153,11 +191,11 @@ void initSPI1() {
 
 // Input directions:
 // char channel: 0(A) or 1(B)
-// char voltage: 000 to 255
+// char voltage: 000(0V) to 255(+3.3V))
 void setVoltage(unsigned char channel, unsigned char voltage) {
     
-    short to_send = 0b0000000000000000;
-    to_send |= voltage << 4;   // left shift the voltage data bits by 4
+    short to_send = 0b0000000000000000;     // initialize short to be sent via spi_io
+    to_send |= voltage << 4;        // left shift the voltage data bits by 4
     to_send |= (0b111 << 12);       // left shift the initialization data bits (BUF, GA, SHDN) by 12
     to_send |= (channel << 15);     // left shift the channel select bit all the way (by 15)
     
