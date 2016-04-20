@@ -78,6 +78,7 @@ int main() {
     
     // I2C setup
     i2c_master_setup();
+    initExpander();                 // initializes GP0-3 as low outputs, GP4-7 as inputs
     
     // create arrays for sine and triangle waves 
     float sinetemp[100];            // initialize a sine array for floating math
@@ -217,6 +218,7 @@ void setVoltage(unsigned char channel, unsigned char voltage) {
 //////// END SPI DAC initializations and functions ////////
 
 
+
 //////// I2C initializations and functions ////////
 
 // I2C Master utilities, 100 kHz, using polling rather than interrupts
@@ -225,8 +227,21 @@ void setVoltage(unsigned char channel, unsigned char voltage) {
 // I2C pins need pull-up resistors, 2k-10k
 
 void i2c_master_setup(void) {
-  I2C2BRG = 233;            // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 
-  I2C2CONbits.ON = 1;               // turn on the I2C1 module
+    
+    // override the analog functionality of B2 and B3
+    ANSELBbits.ANSB2 = 0; 
+    ANSELBbits.ANSB3 = 0;
+    
+    I2C2BRG = 233;            // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 
+    I2C2CONbits.ON = 1;               // turn on the I2C2 module
+    
+    // initialize pins GP0-3 as outputs and GP4-7 as inputs
+    i2c_master_start();
+    i2c_master_send(0b01000000);        // send address and write
+    i2c_master_send(0x00);              // send register address (IODIR) - input or output         
+    i2c_master_send(0b11110000);        // send bits to set GP0-GP3 outputs (0), GP4-GP7 inputs (1)
+                                        // Pins: (7 6 5 4 3 2 1 0)
+    i2c_master_stop();
 }
 
 // Start a transmission on the I2C bus
@@ -268,37 +283,33 @@ void i2c_master_stop(void) {          // send a STOP:
 
 
 void initExpander() {
-    
-    // override the analog functionality
-    ANSELBbits.ANSB2 = 0;   
-    
-    i2c_master_start();
+       
+    // set pins GP0-3 as off
+    i2c_master_start(); 
     i2c_master_send(0b01000000);        // send address and write
-    i2c_master_send(0x00);              // send register address (IODIR) - input or output         
-    i2c_master_send(0b11110000);        // send bits to set GP0-GP3 outputs (0), GP4-GP7 inputs (1)
+    i2c_master_send(0x09);              // send register address (GPIO) - HI (1) or LO (0)
+    i2c_master_send(0b00000000);        // set pins 0-3 as low
     i2c_master_stop();
-    
-//    // Set pins GP0 - GP3 as off
 
 }
 
 // Input directions:
 // char pin takes 0bxxxxxxxx
-void setExpander(char pin, char level) {
-    i2c_master_start();
-    i2c_master_send(0b01000000);        // send address and write
-    i2c_master_send(0x09);              // send register address (GPIO) - HI (1) or LO (0)
-    i2c_master_send();
-    i2c_master_stop();
-}
-
-void getExpander() {
-    i2c_master_start();
-    i2c_master_send(0b01000000);        // send address and write
-    i2c_master_send(0x0A);              // send register address (OLAT) - HI (1) or LO (0)
-    i2c_master_restart();
-    i2c_master_send(0b01000001);        // send address and read
-    char r = i2c_master_recv();         // save the value returned
-    i2c_master_ack(1);
-    i2c_master_stop();
-}
+//void setExpander(char pin, char level) {
+//    i2c_master_start();
+//    i2c_master_send(0b01000000);        // send address and write
+//    i2c_master_send(0x0A);              // send register address (OLAT) - HI (1) or LO (0)
+//    i2c_master_send();                  // FILL THIS OUT WITH PIN AND LEVEL
+//    i2c_master_stop();
+//}
+//
+//void getExpander() {
+//    i2c_master_start();
+//    i2c_master_send(0b01000000);        // send address and write
+//    i2c_master_send(0x09);              // send register address (GPIO) - HI (1) or LO (0)
+//    i2c_master_restart();
+//    i2c_master_send(0b01000001);        // send address and read
+//    char r = i2c_master_recv();         // save the value returned
+//    i2c_master_ack(1);
+//    i2c_master_stop();
+//}
