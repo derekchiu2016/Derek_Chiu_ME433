@@ -225,8 +225,7 @@ void setVoltage(unsigned char channel, unsigned char voltage) {
 // I2C pins need pull-up resistors, 2k-10k
 
 void i2c_master_setup(void) {
-  I2C2BRG = some number for 100kHz;            // I2CBRG = [1/(2*Fsck) - PGD]*Pblck - 2 
-                                    // look up PGD for your PIC32
+  I2C2BRG = 233;            // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 
   I2C2CONbits.ON = 1;               // turn on the I2C1 module
 }
 
@@ -267,16 +266,39 @@ void i2c_master_stop(void) {          // send a STOP:
   while(I2C2CONbits.PEN) { ; }        // wait for STOP to complete
 }
 
-//// I2C Pin Expander
-//void someFunction() {
-//    // Initialize pins GP0 - GP3 as outputs
-//    TRISAbits.TRISA4 = 0;
-//    
+
+void initExpander() {
+    
+    // override the analog functionality
+    ANSELBbits.ANSB2 = 0;   
+    
+    i2c_master_start();
+    i2c_master_send(0b01000000);        // send address and write
+    i2c_master_send(0x00);              // send register address (IODIR) - input or output         
+    i2c_master_send(0b11110000);        // send bits to set GP0-GP3 outputs (0), GP4-GP7 inputs (1)
+    i2c_master_stop();
+    
 //    // Set pins GP0 - GP3 as off
-//    LATAbits.LATA4 = 1;
-//    
-//    // Initialize pins GP4 - GP7 as inputs
-//    TRISAbits.TRISA4 = 1;
-//    LATAbits.LATA4 = 1;
-//    
-//}
+
+}
+
+// Input directions:
+// char pin takes 0bxxxxxxxx
+void setExpander(char pin, char level) {
+    i2c_master_start();
+    i2c_master_send(0b01000000);        // send address and write
+    i2c_master_send(0x09);              // send register address (GPIO) - HI (1) or LO (0)
+    i2c_master_send();
+    i2c_master_stop();
+}
+
+void getExpander() {
+    i2c_master_start();
+    i2c_master_send(0b01000000);        // send address and write
+    i2c_master_send(0x0A);              // send register address (OLAT) - HI (1) or LO (0)
+    i2c_master_restart();
+    i2c_master_send(0b01000001);        // send address and read
+    char r = i2c_master_recv();         // save the value returned
+    i2c_master_ack(1);
+    i2c_master_stop();
+}
