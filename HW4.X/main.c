@@ -9,6 +9,21 @@
 #include <math.h>           // for sine function
 #define CS LATAbits.LATA0   // chip select pin
 
+// Function prototypes
+unsigned char spi_io(unsigned char o);
+void initSPI1();
+void setVoltage(unsigned char channel, unsigned char voltage);
+void i2c_master_setup(void);
+void i2c_master_start(void);
+void i2c_master_restart(void);
+void i2c_master_send(unsigned char byte);
+unsigned char i2c_master_recv(void);
+void i2c_master_ack(int val);
+void i2c_master_stop(void);
+void initExpander();
+void setExpander(char pin, char level); 
+char getExpander();
+
 // Define DEVCFG registers
 // Refer to: /Microchip/xc32/v1.40/docs/config_docs/32mx250f128b.html
 
@@ -318,7 +333,7 @@ void setExpander(char pin, char level) {
     i2c_master_stop();
 }
 
-void getExpander() {
+char getExpander() {
     i2c_master_start();
     i2c_master_send(0b01000000);        // send address and write
     i2c_master_send(0x09);              // send register address (GPIO) - HI (1) or LO (0)
