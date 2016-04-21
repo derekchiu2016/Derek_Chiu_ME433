@@ -80,7 +80,7 @@ int main() {
     i2c_master_setup();
     initExpander();                 // initializes GP0-3 as low outputs, GP4-7 as inputs
     
-    // create arrays for sine and triangle waves 
+    // create arrays for sine and triangle waves for SPI DAC
     float sinetemp[100];            // initialize a sine array for floating math
     unsigned char sine[100];        // initialize a sine array to turn into ints
     float tritemp[100];             // initialize a triangle array for floating math
@@ -121,7 +121,16 @@ int main() {
         }
         
         // I2C
-        
+        // read GP7 (pushbutton) and output HI on GP0 if GP7 HI (pushed)
+        //while ((getExpander() && 0b10000000) == 0b10000000) {       // if GP7 is HI...
+        if (PORTBbits.RB4 == 0) {
+            setExpander(0b00000001,1);                              // set GP0 HI
+        }
+        else {
+            setExpander(0b00000001,0);                              // otherwise GP0 LO
+        }
+ 
+   
 
 /*      HOMEWORK 1 FLASHING LED
   
@@ -232,8 +241,8 @@ void i2c_master_setup(void) {
     ANSELBbits.ANSB2 = 0; 
     ANSELBbits.ANSB3 = 0;
     
-    I2C2BRG = 233;            // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 
-    I2C2CONbits.ON = 1;               // turn on the I2C2 module
+    I2C2BRG = 233;                  // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 
+    I2C2CONbits.ON = 1;             // turn on the I2C2 module
     
     // initialize pins GP0-3 as outputs and GP4-7 as inputs
     i2c_master_start();
@@ -244,6 +253,7 @@ void i2c_master_setup(void) {
     i2c_master_stop();
 }
 
+// I2C functions
 // Start a transmission on the I2C bus
 void i2c_master_start(void) {
     I2C2CONbits.SEN = 1;            // send the start bit
@@ -281,13 +291,12 @@ void i2c_master_stop(void) {          // send a STOP:
   while(I2C2CONbits.PEN) { ; }        // wait for STOP to complete
 }
 
-
 void initExpander() {
        
     // set pins GP0-3 as off
     i2c_master_start(); 
     i2c_master_send(0b01000000);        // send address and write
-    i2c_master_send(0x09);              // send register address (GPIO) - HI (1) or LO (0)
+    i2c_master_send(0x0A);              // send register address (OLAT) - HI (1) or LO (0)
     i2c_master_send(0b00000000);        // set pins 0-3 as low
     i2c_master_stop();
 
@@ -295,21 +304,28 @@ void initExpander() {
 
 // Input directions:
 // char pin takes 0bxxxxxxxx
-//void setExpander(char pin, char level) {
-//    i2c_master_start();
-//    i2c_master_send(0b01000000);        // send address and write
-//    i2c_master_send(0x0A);              // send register address (OLAT) - HI (1) or LO (0)
-//    i2c_master_send();                  // FILL THIS OUT WITH PIN AND LEVEL
-//    i2c_master_stop();
-//}
-//
-//void getExpander() {
-//    i2c_master_start();
-//    i2c_master_send(0b01000000);        // send address and write
-//    i2c_master_send(0x09);              // send register address (GPIO) - HI (1) or LO (0)
-//    i2c_master_restart();
-//    i2c_master_send(0b01000001);        // send address and read
-//    char r = i2c_master_recv();         // save the value returned
-//    i2c_master_ack(1);
-//    i2c_master_stop();
-//}
+// char level takes 1 or 0
+// if level is 1, sets selected pins HI, otherwise if level is 0, all pins LO
+void setExpander(char pin, char level) {
+    char levelbyte = 0b11111111;
+    if (level == 0) {
+        levelbyte = 0b00000000;
+    }    
+    i2c_master_start();
+    i2c_master_send(0b01000000);        // send address and write
+    i2c_master_send(0x0A);              // send register address (OLAT) - HI (1) or LO (0)
+    i2c_master_send(pin & levelbyte);   // set selected pins to HI or all pins to LO, depending on level 
+    i2c_master_stop();
+}
+
+void getExpander() {
+    i2c_master_start();
+    i2c_master_send(0b01000000);        // send address and write
+    i2c_master_send(0x09);              // send register address (GPIO) - HI (1) or LO (0)
+    i2c_master_restart();
+    i2c_master_send(0b01000001);        // send address and read
+    char r = i2c_master_recv();         // save the value returned
+    i2c_master_ack(1);
+    i2c_master_stop();
+    return r;
+}
