@@ -123,7 +123,7 @@ int main() {
         // I2C
         // read GP7 (pushbutton) and output HI on GP0 if GP7 HI (pushed)
         //while ((getExpander() && 0b10000000) == 0b10000000) {       // if GP7 is HI...
-        if (PORTBbits.RB4 == 0) {
+        if ((getExpander() & 0b10000000) == 0b10000000) {
             setExpander(0b00000001,1);                              // set GP0 HI
         }
         else {
