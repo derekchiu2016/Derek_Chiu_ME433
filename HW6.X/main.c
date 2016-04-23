@@ -251,14 +251,19 @@ void initIMU() {
     i2c_master_start();
     i2c_master_send(0b11010110);        // send to IMU address and write
     i2c_master_send(0x10);              // send to CTRL1_XL register (accelerometer)
-    i2c_master_send(0b100000__);        // sample rate 1.66 kHz, 2g sensitivity, x filter
+    i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 2g sensitivity, x filter
+    i2c_master_stop();
     
+    i2c_master_start();
+    i2c_master_send(0b11010110);        // send to IMU address and write
     i2c_master_send(0x11);              // send to CTRL2_G register (gyro)
-    i2c_master_send(0b100000_0);        // sample rate 1.66 kHz, 245 dps sensitivity, x filter
+    i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 245 dps sensitivity, x filter
+    i2c_master_stop();
     
+    i2c_master_start();
+    i2c_master_send(0b11010110);        // send to IMU address and write
     i2c_master_send(0x12);              // send to CTROL3_C register (enable multi-read)
     i2c_master_send(0b00000100);        // make IF_INC bit 1 to enable multi, but leave all others at default
-    
     i2c_master_stop();
 }
 
@@ -312,6 +317,17 @@ unsigned char getIMU() {
     i2c_master_stop();
     return r;
 }
+
+void i2c_read_multiple(char address, char reg, unsigned char * data, char length) {
+    i2c_master_start();
+    i2c_master_send(0b11010110);    
+    i2c_master_send(0x20);      
+    i2c_master_restart();
+    i2c_master_send(0b11010111);
+    char v = i2c_master_recv();
+    
+}
+
 
 /*  ////// HW 4 I/O expander initialization, setExpander, getExpander  //////
 void initExpander() {
