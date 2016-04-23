@@ -20,7 +20,7 @@ void i2c_master_send(unsigned char byte);
 unsigned char i2c_master_recv(void);
 void i2c_master_ack(int val);
 void i2c_master_stop(void);
-unsigned char getPololu();
+unsigned char getIMU();
 
 /* HW 4 function prototypes
 void initExpander();
@@ -124,7 +124,7 @@ int main() {
         // HOMEWORK 6 IMU I2C
         
         // read from WHOAMI register to make sure connections and I2C code are OK
-        while (getPololu() == 0b01101001) {
+        while (getIMU() == 0b01101001) {
             setVoltage(0,255);
         }
       
@@ -241,18 +241,25 @@ void i2c_master_setup(void) {
     ANSELBbits.ANSB2 = 0; 
     ANSELBbits.ANSB3 = 0;
     
+    // set baud to 400 kHz
     I2C2BRG = 233;                  // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 
     I2C2CONbits.ON = 1;             // turn on the I2C2 module
-    
-    
-/*      ////// HW 4 writing to I/O expander chip ///////    
-    // initialize pins GP0-3 as outputs and GP4-7 as inputs
+}
+
+// turn on accelerometer, gyro and set sample rates; enable multiple register reading
+void initIMU() {
     i2c_master_start();
-    i2c_master_send(0b01000000);        // send address and write
-    i2c_master_send(0x00);              // send register address (IODIR) - input or output         
-    i2c_master_send(0b11110000);        // send bits to set GP0-GP3 outputs (0), GP4-GP7 inputs (1)
-                                        // Pins: (7 6 5 4 3 2 1 0)
-    i2c_master_stop();                  */
+    i2c_master_send(0b11010110);        // send to IMU address and write
+    i2c_master_send(0x10);              // send to CTRL1_XL register (accelerometer)
+    i2c_master_send(0b100000__);        // sample rate 1.66 kHz, 2g sensitivity, x filter
+    
+    i2c_master_send(0x11);              // send to CTRL2_G register (gyro)
+    i2c_master_send(0b100000_0);        // sample rate 1.66 kHz, 245 dps sensitivity, x filter
+    
+    i2c_master_send(0x12);              // send to CTROL3_C register (enable multi-read)
+    i2c_master_send(0b00000100);        // make IF_INC bit 1 to enable multi, but leave all others at default
+    
+    i2c_master_stop();
 }
 
 // I2C functions
@@ -294,7 +301,7 @@ void i2c_master_stop(void) {          // send a STOP:
 }
 
 // read from WHO_AM_I register to make sure initialization worked
-unsigned char getPololu() {
+unsigned char getIMU() {
     i2c_master_start();
     i2c_master_send(0b11010110);     // send POLOLU address and write
     i2c_master_send(0x0F);              // send register address (GPIO) - HI (1) or LO (0)
@@ -309,6 +316,15 @@ unsigned char getPololu() {
 /*  ////// HW 4 I/O expander initialization, setExpander, getExpander  //////
 void initExpander() {
        
+    ////// HW 4 writing to I/O expander chip ///////    
+    // initialize pins GP0-3 as outputs and GP4-7 as inputs
+    i2c_master_start();
+    i2c_master_send(0b01000000);        // send address and write
+    i2c_master_send(0x00);              // send register address (IODIR) - input or output         
+    i2c_master_send(0b11110000);        // send bits to set GP0-GP3 outputs (0), GP4-GP7 inputs (1)
+                                        // Pins: (7 6 5 4 3 2 1 0)
+    i2c_master_stop();    
+
     // set pins GP0-3 as off
     i2c_master_start(); 
     i2c_master_send(0b01000000);        // send address and write
