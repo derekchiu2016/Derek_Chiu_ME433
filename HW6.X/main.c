@@ -20,7 +20,9 @@ void i2c_master_send(unsigned char byte);
 unsigned char i2c_master_recv(void);
 void i2c_master_ack(int val);
 void i2c_master_stop(void);
-unsigned char getIMU();
+void initIMU();
+void i2c_read_multiple(char address, char reg, unsigned char *data, char length);
+
 
 /* HW 4 function prototypes
 void initExpander();
@@ -96,6 +98,25 @@ int main() {
     
     // I2C setup
     i2c_master_setup();
+    initIMU();
+    
+    // setup the PWM
+    RPB15Rbits.RPB15R = 0b0101;     // assign OC1 to pin B15
+    RPB8Rbits.RPB8R = 0b0101;       // assign OC2 to pin B8
+
+    // set frequency to 1kHz
+    T2CONbits.TCKPS = 0b011;        // timer prescaler N = 8
+    PR2 = 9999;                     // (PR2+1)N*12.5nS = 0.001s -- 1kHz
+    TMR2 = 0;                       // set timer2 to 0                    
+    T2CONbits.ON = 1;               // turn on timer2
+
+    OC1CONbits.OCTSEL = 0;          // set OC1 to use timer2
+    OC1CONbits.OCM = 0b110;         // PWM mode without fault pin; other OC1CON bits are defaults
+    OC1RS = 5000;                   // duty cycle = OC1RS/(PR2+1)
+    OC1R = 5000;
+    OC1CONbits.ON = 1;              // turn on OC1
+    
+    
     
     /* HW 4 setups
     initExpander();                 // initializes GP0-3 as low outputs, GP4-7 as inputs        */
@@ -121,14 +142,36 @@ int main() {
     
     while(1) {      
         
-        // HOMEWORK 6 IMU I2C
         
-        // read from WHOAMI register to make sure connections and I2C code are OK
-        while (getIMU() == 0b01101001) {
-            setVoltage(0,255);
-        }
-      
+        // HOMEWORK 6 IMU I2C
                
+        unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
+        // input address for IMU, OUT_TEMP_L address, data array, and length
+        i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
+        
+        // construct shorts from char using the dataIMU array
+        short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
+        short gyroX = ((dataIMU[2]) | (dataIMU[3] << 8));
+        short gyroY = ((dataIMU[4]) | (dataIMU[5] << 8));
+        short gyroZ = ((dataIMU[6]) | (dataIMU[7] << 8));
+        short accelX = ((dataIMU[8]) | (dataIMU[9] << 8));
+        short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
+        short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
+        
+
+        
+//        OC2CONbits.OCTSEL = 0;          // set OC2 to use timer2
+//        OC2CONbits.OCM = 0b110;         // PWM mode without fault pin; other OC1CON bits are defaults
+//        OC2RS = 5000;                   // duty cycle = OC1RS/(PR2+1)
+//        OC2R = 5000;
+//        OC2CONbits.ON = 1;              // turn on OC2
+        
+                
+                
+                              
+        
+        
+                        
                
         
 /*        // HOMEWORK 4 SPI (CREATE SINE AND TRIANGLE WAVES) AND I2C (BUTTON/LED)
@@ -248,18 +291,21 @@ void i2c_master_setup(void) {
 
 // turn on accelerometer, gyro and set sample rates; enable multiple register reading
 void initIMU() {
+    // setup the accelerometer
     i2c_master_start();
     i2c_master_send(0b11010110);        // send to IMU address and write
     i2c_master_send(0x10);              // send to CTRL1_XL register (accelerometer)
     i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 2g sensitivity, x filter
     i2c_master_stop();
     
+    // setup the gyro
     i2c_master_start();
     i2c_master_send(0b11010110);        // send to IMU address and write
     i2c_master_send(0x11);              // send to CTRL2_G register (gyro)
     i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 245 dps sensitivity, x filter
     i2c_master_stop();
     
+    // setup multi-read
     i2c_master_start();
     i2c_master_send(0b11010110);        // send to IMU address and write
     i2c_master_send(0x12);              // send to CTROL3_C register (enable multi-read)
@@ -305,28 +351,30 @@ void i2c_master_stop(void) {          // send a STOP:
   while(I2C2CONbits.PEN) { ; }        // wait for STOP to complete
 }
 
-// read from WHO_AM_I register to make sure initialization worked
-unsigned char getIMU() {
-    i2c_master_start();
-    i2c_master_send(0b11010110);     // send POLOLU address and write
-    i2c_master_send(0x0F);              // send register address (GPIO) - HI (1) or LO (0)
-    i2c_master_restart();
-    i2c_master_send(0b11010111);        // send address and read
-    char r = i2c_master_recv();         // save the value returned
-    i2c_master_ack(1);
-    i2c_master_stop();
-    return r;
-}
-
-void i2c_read_multiple(char address, char reg, unsigned char * data, char length) {
-    i2c_master_start();
-    i2c_master_send(0b11010110);    
-    i2c_master_send(0x20);      
-    i2c_master_restart();
-    i2c_master_send(0b11010111);
-    char v = i2c_master_recv();
+// function to read from multiple registers consecutively
+// char address: 0b11010110 for IMU chip
+// char reg: the 1st register from which you want to start reading
+// unsigned char *data: a data array of length (length) defined in main: (e.g. dataIMU[length])
+// char length: the number of registers you want to read from
+void i2c_read_multiple(char address, char reg, unsigned char *data, char length) {
+    i2c_master_start();                          
+    i2c_master_send((address << 1) | 1);        // send address and write
+    i2c_master_send(reg);                       // send register address
+    i2c_master_restart;
+    i2c_master_send(address << 1);              // send address and read
     
+    // initiate a loop to consecutively read values from consecutive registers
+    int i;
+    for (i = 0; i < length-1; i++) {
+        data[i] = i2c_master_recv();            // store read value into array
+        i2c_master_ack(0);                      // ack 0 to continue reading
+    }
+
+    data[length-1] = i2c_master_recv();         // for last value, individually enter it into array 
+    i2c_master_ack(1);                          // so you can ack 1 and stop reading
+    i2c_master_stop();
 }
+    
 
 
 /*  ////// HW 4 I/O expander initialization, setExpander, getExpander  //////
