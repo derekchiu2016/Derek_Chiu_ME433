@@ -11,7 +11,7 @@
 
 // Function prototypes
 unsigned char spi_io(unsigned char o);
-void initSPI1();
+void initSPI1(void);
 void setVoltage(unsigned char channel, unsigned char voltage);
 void i2c_master_setup(void);
 void i2c_master_start(void);
@@ -20,15 +20,10 @@ void i2c_master_send(unsigned char byte);
 unsigned char i2c_master_recv(void);
 void i2c_master_ack(int val);
 void i2c_master_stop(void);
+void initPWM(void);
 void initIMU(void);
 void i2c_read_multiple(char address, char reg, unsigned char * data, char length);
 
-
-
-/* HW 4 function prototypes
-void initExpander();
-void setExpander(char pin, char level); 
-char getExpander();       */
 
 // Define DEVCFG registers
 // Refer to: /Microchip/xc32/v1.40/docs/config_docs/32mx250f128b.html
@@ -101,7 +96,51 @@ int main() {
     i2c_master_setup();
     initIMU();
     
-    // setup the PWM
+    // PWM setup
+    initPWM();
+    
+
+    while(1) {      
+
+        // HOMEWORK 6 IMU I2C
+        
+        // set core timer to zero
+        // set it here so timer can run while below code executes
+        _CP0_SET_COUNT(0);
+               
+        unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
+        // input address for IMU, OUT_TEMP_L address, data array, and length
+        
+        i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
+        // NOTE: when using this function, POWER CYCLE the PIC (reset the power) to reset i2c_master_recv())
+        
+        // construct shorts from char using the dataIMU array (shift the H byte, or it with the L byte)
+        short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
+        short gyroX = ((dataIMU[2]) | (dataIMU[3] << 8));
+        short gyroY = ((dataIMU[4]) | (dataIMU[5] << 8));
+        short gyroZ = ((dataIMU[6]) | (dataIMU[7] << 8));
+        short accelX = ((dataIMU[8]) | (dataIMU[9] << 8));
+        short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
+        short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
+        
+        // scale the duty cycle depending on x and y accelerations
+        float duty1 = 6000.0*(accelX)/65000.0;
+        OC1RS = duty1;
+        
+        float duty2 = 6000.0*(accelY+ 32000.0)/65000.0;
+        OC2RS = duty2;
+        
+        // delay to read at 50Hz
+        while(_CP0_GET_COUNT() < 480000) {
+                ;           // delay for 0.02s (24MHz * 0.02s = 480,000 ticks)
+        }  
+                             
+    }
+     
+}
+
+void initPWM(void) {
+  // setup the PWM
     RPB15Rbits.RPB15R = 0b0101;     // assign OC1 to pin B15
     RPB8Rbits.RPB8R = 0b0101;       // assign OC2 to pin B8
 
@@ -122,93 +161,6 @@ int main() {
     OC2RS = 3000;                   // duty cycle = OC1RS/(PR2+1) = 50%
     OC2R = 3000;                    // OC2R for just in case it rolls over
     OC2CONbits.ON = 1;              // turn on OC2
-    
-    
-    
-    /* HW 4 setups
-    initExpander();                 // initializes GP0-3 as low outputs, GP4-7 as inputs        */
-    
-    /* HW 4 sine and triangle wave stuff
-    // create arrays for sine and triangle waves for SPI DAC
-    float sinetemp[100];            // initialize a sine array for floating math
-    unsigned char sine[100];        // initialize a sine array to turn into ints
-    float tritemp[100];             // initialize a triangle array for floating math
-    unsigned char tri[100];         // initialize a triangle to turn into ints
-    
-    int i;
-    for (i = 0; i < 100; i++) {
-        // sin array should update values 100 times every period for a 10 Hz sine wave
-        sinetemp[i] = 255.0*((sin((i/100.0)*2.0*3.14159265)+1.0)/2.0);
-        sine[i] = (unsigned char) sinetemp[i];      // cast result into integer       
-        
-        // triangle array should update values 100 times every period for a 10 Hz tri wave
-        tritemp[i] = 255.0*(i/99.0);                           
-        tri[i] = (unsigned char) tritemp[i];        // cast result into integer
-    }                                       */
-    
-    
-    while(1) {      
-        
-        
-        // HOMEWORK 6 IMU I2C
-        
-        //set count here
-               
-        unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
-        // input address for IMU, OUT_TEMP_L address, data array, and length
-        
-        i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
-        // NOTE: when using this function, POWER CYCLE the PIC (reset the power)
-        
-        
-        // construct shorts from char using the dataIMU array
-        short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
-        short gyroX = ((dataIMU[2]) | (dataIMU[3] << 8));
-        short gyroY = ((dataIMU[4]) | (dataIMU[5] << 8));
-        short gyroZ = ((dataIMU[6]) | (dataIMU[7] << 8));
-        short accelX = ((dataIMU[8]) | (dataIMU[9] << 8));
-        short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
-        short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
-        
-        
-        OC1RS = 6000*(accelX + 0b0111111100000000)/0b1111111111111111;
-          
-        
-        //while count stuff here
-        
-/*        // HOMEWORK 4 SPI (CREATE SINE AND TRIANGLE WAVES) AND I2C (BUTTON/LED)
-        
-        // SPI DAC
-        // send values to SPI to return voltage values for sine and triangle waves
-        int j;
-        for (j = 0; j < 100; j++) {
-            setVoltage(0,sine[j]);
-            setVoltage(1,tri[j]);
-            
-            // to make the waves run at 10 Hz, use the core timer
-            // set core timer to 0
-            _CP0_SET_COUNT(0);
-            
-            // delay for 1mS (100 values * 1ms = 0.1s = 10 Hz wave)
-            while(_CP0_GET_COUNT() < 24000) {
-                ;
-            }  
-            
-        }
-        
-      HW 4 I/O expander lighting an LED when button pushed        
-        // I2C
-        // read GP7 (pushbutton) and output HI on GP0 if GP7 HI (pushed)
-        //while ((getExpander() && 0b10000000) == 0b10000000) {       // if GP7 is HI...
-        if ((getExpander() & 0b10000000) == 0b10000000) {
-            setExpander(0b00000001,1);                              // set GP0 HI
-        }
-        else {
-            setExpander(0b00000001,0);                              // otherwise GP0 LO
-        }                                                       */
-                      
-    }
-     
 }
 
 //////// SPI DAC initializations and functions ////////
@@ -223,7 +175,7 @@ unsigned char spi_io(unsigned char o) {
 }     
 
 // initialize spi1 and the ram module
-void initSPI1() {
+void initSPI1(void) {
     // set up the chip select pin (A0) as an output
     // the chip select pin is used by the sram to indicate
     // when a command is beginning (clear CS to low) and when it
@@ -378,55 +330,4 @@ void i2c_read_multiple(char address, char reg, unsigned char * data, char length
     i2c_master_stop();
 }
     
-
-
-/*  ////// HW 4 I/O expander initialization, setExpander, getExpander  //////
-void initExpander() {
-       
-    ////// HW 4 writing to I/O expander chip ///////    
-    // initialize pins GP0-3 as outputs and GP4-7 as inputs
-    i2c_master_start();
-    i2c_master_send(0b01000000);        // send address and write
-    i2c_master_send(0x00);              // send register address (IODIR) - input or output         
-    i2c_master_send(0b11110000);        // send bits to set GP0-GP3 outputs (0), GP4-GP7 inputs (1)
-                                        // Pins: (7 6 5 4 3 2 1 0)
-    i2c_master_stop();    
-
-    // set pins GP0-3 as off
-    i2c_master_start(); 
-    i2c_master_send(0b01000000);        // send address and write
-    i2c_master_send(0x0A);              // send register address (OLAT) - HI (1) or LO (0)
-    i2c_master_send(0b00000000);        // set pins 0-3 as low
-    i2c_master_stop();
-
-}                                       
-
-// Input directions:
-// char pin takes 0bxxxxxxxx
-// char level takes 1 or 0
-// if level is 1, sets selected pins HI, otherwise if level is 0, all pins LO
-void setExpander(char pin, char level) {
-    char levelbyte = 0b11111111;
-    if (level == 0) {
-        levelbyte = 0b00000000;
-    }    
-    i2c_master_start();
-    i2c_master_send(0b01000000);        // send address and write
-    i2c_master_send(0x0A);              // send register address (OLAT) - HI (1) or LO (0)
-    i2c_master_send(pin & levelbyte);   // set selected pins to HI or all pins to LO, depending on level 
-    i2c_master_stop();
-}
-
-char getExpander() {
-    i2c_master_start();
-    i2c_master_send(0b01000000);        // send address and write
-    i2c_master_send(0x09);              // send register address (GPIO) - HI (1) or LO (0)
-    i2c_master_restart();
-    i2c_master_send(0b01000001);        // send address and read
-    char r = i2c_master_recv();         // save the value returned
-    i2c_master_ack(1);
-    i2c_master_stop();
-    return r;
-}                                       */
-
 //////// END I2C initializations and functions ////////
