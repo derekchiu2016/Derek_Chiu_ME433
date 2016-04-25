@@ -104,17 +104,24 @@ int main() {
     RPB15Rbits.RPB15R = 0b0101;     // assign OC1 to pin B15
     RPB8Rbits.RPB8R = 0b0101;       // assign OC2 to pin B8
 
-    // set frequency to 1kHz
+    // FREQUENCY IS OFF SLIGHTLY!! CAUSE IS 12.5NS, INPUT CLOCK, OR WHAT?
+    // set PWM frequency and duty cycle
     T2CONbits.TCKPS = 0b011;        // timer prescaler N = 8
-    PR2 = 9999;                     // (PR2+1)N*12.5nS = 0.001s -- 1kHz
+    PR2 = 5999;                     // (PR2+1)N/48MHz = 1/1kHz
     TMR2 = 0;                       // set timer2 to 0                    
     T2CONbits.ON = 1;               // turn on timer2
 
     OC1CONbits.OCTSEL = 0;          // set OC1 to use timer2
     OC1CONbits.OCM = 0b110;         // PWM mode without fault pin; other OC1CON bits are defaults
-    OC1RS = 5000;                   // duty cycle = OC1RS/(PR2+1)
-    OC1R = 5000;
+    OC1RS = 3000;                   // duty cycle = OC1RS/(PR2+1) = 50%
+    OC1R = 3000;                    // OC1R for just in case it rolls over
     OC1CONbits.ON = 1;              // turn on OC1
+    
+    OC2CONbits.OCTSEL = 0;          // set OC2 to use timer2
+    OC2CONbits.OCM = 0b110;         // PWM mode without fault pin; other OC1CON bits are defaults
+    OC2RS = 3000;                   // duty cycle = OC1RS/(PR2+1) = 50%
+    OC2R = 3000;                    // OC2R forj ust in case it rolls over
+    OC2CONbits.ON = 1;              // turn on OC2
     
     
     
