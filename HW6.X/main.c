@@ -20,8 +20,9 @@ void i2c_master_send(unsigned char byte);
 unsigned char i2c_master_recv(void);
 void i2c_master_ack(int val);
 void i2c_master_stop(void);
-void initIMU();
-void i2c_read_multiple(char address, char reg, unsigned char *data, char length);
+void initIMU(void);
+void i2c_read_multiple(char address, char reg, unsigned char * data, char length);
+
 
 
 /* HW 4 function prototypes
@@ -104,8 +105,7 @@ int main() {
     RPB15Rbits.RPB15R = 0b0101;     // assign OC1 to pin B15
     RPB8Rbits.RPB8R = 0b0101;       // assign OC2 to pin B8
 
-    // FREQUENCY IS OFF SLIGHTLY!! CAUSE IS 12.5NS, INPUT CLOCK, OR WHAT?
-    // set PWM frequency and duty cycle
+    // initialize PWM; frequency = 1kHz; duty cycle = 50%
     T2CONbits.TCKPS = 0b011;        // timer prescaler N = 8
     PR2 = 5999;                     // (PR2+1)N/48MHz = 1/1kHz
     TMR2 = 0;                       // set timer2 to 0                    
@@ -120,7 +120,7 @@ int main() {
     OC2CONbits.OCTSEL = 0;          // set OC2 to use timer2
     OC2CONbits.OCM = 0b110;         // PWM mode without fault pin; other OC1CON bits are defaults
     OC2RS = 3000;                   // duty cycle = OC1RS/(PR2+1) = 50%
-    OC2R = 3000;                    // OC2R forj ust in case it rolls over
+    OC2R = 3000;                    // OC2R for just in case it rolls over
     OC2CONbits.ON = 1;              // turn on OC2
     
     
@@ -151,10 +151,15 @@ int main() {
         
         
         // HOMEWORK 6 IMU I2C
+        
+        //set count here
                
         unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
         // input address for IMU, OUT_TEMP_L address, data array, and length
+        
         i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
+        // NOTE: when using this function, POWER CYCLE the PIC (reset the power)
+        
         
         // construct shorts from char using the dataIMU array
         short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
@@ -165,21 +170,11 @@ int main() {
         short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
         short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
         
-
         
-//        OC2CONbits.OCTSEL = 0;          // set OC2 to use timer2
-//        OC2CONbits.OCM = 0b110;         // PWM mode without fault pin; other OC1CON bits are defaults
-//        OC2RS = 5000;                   // duty cycle = OC1RS/(PR2+1)
-//        OC2R = 5000;
-//        OC2CONbits.ON = 1;              // turn on OC2
+        OC1RS = 6000*(accelX + 0b0111111100000000)/0b1111111111111111;
+          
         
-                
-                
-                              
-        
-        
-                        
-               
+        //while count stuff here
         
 /*        // HOMEWORK 4 SPI (CREATE SINE AND TRIANGLE WAVES) AND I2C (BUTTON/LED)
         
@@ -297,7 +292,7 @@ void i2c_master_setup(void) {
 }
 
 // turn on accelerometer, gyro and set sample rates; enable multiple register reading
-void initIMU() {
+void initIMU(void) {
     // setup the accelerometer
     i2c_master_start();
     i2c_master_send(0b11010110);        // send to IMU address and write
@@ -315,7 +310,7 @@ void initIMU() {
     // setup multi-read
     i2c_master_start();
     i2c_master_send(0b11010110);        // send to IMU address and write
-    i2c_master_send(0x12);              // send to CTROL3_C register (enable multi-read)
+    i2c_master_send(0x12);              // send to CTRL3_C register (enable multi-read)
     i2c_master_send(0b00000100);        // make IF_INC bit 1 to enable multi, but leave all others at default
     i2c_master_stop();
 }
@@ -358,18 +353,19 @@ void i2c_master_stop(void) {          // send a STOP:
   while(I2C2CONbits.PEN) { ; }        // wait for STOP to complete
 }
 
+
 // function to read from multiple registers consecutively
-// char address: 0b11010110 for IMU chip
+// char address: 7 bit chip address (0b11010110 for IMU chip)
 // char reg: the 1st register from which you want to start reading
 // unsigned char *data: a data array of length (length) defined in main: (e.g. dataIMU[length])
 // char length: the number of registers you want to read from
-void i2c_read_multiple(char address, char reg, unsigned char *data, char length) {
+void i2c_read_multiple(char address, char reg, unsigned char * data, char length) {
     i2c_master_start();                          
-    i2c_master_send((address << 1) | 1);        // send address and write
+    i2c_master_send(address << 1);              // send address and write
     i2c_master_send(reg);                       // send register address
     i2c_master_restart;
-    i2c_master_send(address << 1);              // send address and read
-    
+    i2c_master_send((address << 1) | 1);        // send address and read 
+     
     // initiate a loop to consecutively read values from consecutive registers
     int i;
     for (i = 0; i < length-1; i++) {
