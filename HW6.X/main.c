@@ -127,7 +127,7 @@ int main() {
         float duty1 = 6000.0*(accelX)/65000.0;
         OC1RS = duty1;
         
-        float duty2 = 6000.0*(accelY+ 32000.0)/65000.0;
+        float duty2 = 6000.0*(accelY + 32000.0)/65000.0;
         OC2RS = duty2;
         
         // delay to read at 50Hz
