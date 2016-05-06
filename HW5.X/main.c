@@ -8,7 +8,6 @@
 #include <sys/attribs.h>    // __ISR macro
 #include <math.h>           // for sine function
 #include "ILI9163C.h"       // LCD header
-#define CS LATBbits.LATB7   // chip select pin
 
 // Function prototypes
 unsigned char spi_io(unsigned char o);
@@ -23,13 +22,7 @@ void i2c_master_stop(void);
 void initIMU(void);
 void i2c_read_multiple(char address, char reg, unsigned char * data, char length);
 unsigned char whoami(void);
-void LCD_data(unsigned char dat);
-void LCD_data16(unsigned short dat);
-void LCD_init();
-void LCD_drawPixel(unsigned short x, unsigned short y, unsigned short color);
-void LCD_setAddr(unsigned short x0, unsigned short y0, unsigned short x1, unsigned short y1);
-void LCD_clearScreen(unsigned short color);
-
+void LCD_drawCharacter(unsigned short x, unsigned short y, char c);
 
 // Define DEVCFG registers
 // Refer to: /Microchip/xc32/v1.40/docs/config_docs/32mx250f128b.html
@@ -101,42 +94,42 @@ int main() {
     // I2C setup
     i2c_master_setup();
     initIMU();
+    
+    // LCD setup
+    LCD_init();
 
 
     while(1) {      
 
-        // HOMEWORK 6 IMU I2C
+//        // HOMEWORK 6 IMU I2C
+//        
+//        // set core timer to zero
+//        // set it here so timer can run while below code executes
+//         _CP0_SET_COUNT(0);
+//               
+//        unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
+//        // input address for IMU, OUT_TEMP_L address, data array, and length
+//        
+//        i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
+//        // NOTE: when using this function, POWER CYCLE the PIC (reset the power) to reset i2c_master_recv())
+//        
+//        // construct shorts from char using the dataIMU array (shift the H byte, or it with the L byte)
+//        short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
+//        short gyroX = ((dataIMU[2]) | (dataIMU[3] << 8));
+//        short gyroY = ((dataIMU[4]) | (dataIMU[5] << 8));
+//        short gyroZ = ((dataIMU[6]) | (dataIMU[7] << 8));
+//        short accelX = ((dataIMU[8]) | (dataIMU[9] << 8));
+//        short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
+//        short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
+//        
+//        // delay to read at 50Hz
+//        while(_CP0_GET_COUNT() < 480000) {
+//                ;           // delay for 0.02s (24MHz * 0.02s = 480,000 ticks)
+//        }  
+        LCD_clearScreen(WHITE);
+        LCD_drawCharacter(124,120,'R');
         
-        // set core timer to zero
-        // set it here so timer can run while below code executes
-         _CP0_SET_COUNT(0);
-               
-        unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
-        // input address for IMU, OUT_TEMP_L address, data array, and length
-        
-        i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
-        // NOTE: when using this function, POWER CYCLE the PIC (reset the power) to reset i2c_master_recv())
-        
-        // construct shorts from char using the dataIMU array (shift the H byte, or it with the L byte)
-        short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
-        short gyroX = ((dataIMU[2]) | (dataIMU[3] << 8));
-        short gyroY = ((dataIMU[4]) | (dataIMU[5] << 8));
-        short gyroZ = ((dataIMU[6]) | (dataIMU[7] << 8));
-        short accelX = ((dataIMU[8]) | (dataIMU[9] << 8));
-        short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
-        short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
-        
-        // scale the duty cycle depending on x and y accelerations
-        float duty1 = 3000.0*(accelX)/32000.0;
-        OC1RS = duty1 + 3000;
-        
-        float duty2 = 3000.0*(accelY)/32000.0;
-        OC2RS = duty2 + 3000;
-        
-        // delay to read at 50Hz
-        while(_CP0_GET_COUNT() < 480000) {
-                ;           // delay for 0.02s (24MHz * 0.02s = 480,000 ticks)
-        }  
+  
                              
     }
      
@@ -330,6 +323,36 @@ void LCD_clearScreen(unsigned short color) {
 		for (i = 0;i < _GRAMSIZE; i++){
 			LCD_data16(color);
 		}
+}
+
+void LCD_drawCharacter(unsigned short x, unsigned short y, char c) {
+    int i;
+    int j;
+    if ((x < 124) & (y < 121)) {
+        
+        for (i = 0; i < 5; i++) {
+        
+            char byte = ASCII[c - 0x20][i];          // subtract 0x20 because of ASCII stuff
+            for (j = 7; j >= 0; j--) {
+            
+                if (((byte >> j) & 1) == 1) {
+                    LCD_drawPixel(x+i,y+j,0x0000);      // make the pixel black
+                }
+            
+                if (((byte >> j) & 1) == 0) {
+                    LCD_drawPixel(x+i,y+j,0xFFFF);      // make the pixel white
+                }
+            
+            }
+        
+        }
+    
+    }
+    else {
+        LCD_clearScreen(RED);
+    }
+    
+        
 }
 
 

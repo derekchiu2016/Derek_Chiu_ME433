@@ -191,7 +191,7 @@ unsigned char whoAmI(void) {
 unsigned char getAccel(void) {
     i2c_master_start();
     i2c_master_send(0b11010110);         
-    i2c_master_send(0x2A);
+    i2c_master_send(0x28);
     i2c_master_restart();
     i2c_master_send(0b11010111);    
     char r = i2c_master_recv();        
