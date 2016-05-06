@@ -95,6 +95,7 @@ int main() {
     i2c_master_setup();
     initExpander();                 // initializes GP0-3 as low outputs, GP4-7 as inputs
     
+    
     // create arrays for sine and triangle waves for SPI DAC
     float sinetemp[100];            // initialize a sine array for floating math
     unsigned char sine[100];        // initialize a sine array to turn into ints

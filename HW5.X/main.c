@@ -1,5 +1,5 @@
 /* ************************************************************************** */
-// ME433 Homework 6
+// ME433 Homework 5
 // Derek Chiu
 
 
@@ -7,12 +7,12 @@
 #include <xc.h>             // processor SFR definitions
 #include <sys/attribs.h>    // __ISR macro
 #include <math.h>           // for sine function
-#define CS LATAbits.LATA0   // chip select pin
+#include "ILI9163C.h"       // LCD header
+#define CS LATBbits.LATB7   // chip select pin
 
 // Function prototypes
 unsigned char spi_io(unsigned char o);
 void initSPI1(void);
-void setVoltage(unsigned char channel, unsigned char voltage);
 void i2c_master_setup(void);
 void i2c_master_start(void);
 void i2c_master_restart(void);
@@ -20,10 +20,15 @@ void i2c_master_send(unsigned char byte);
 unsigned char i2c_master_recv(void);
 void i2c_master_ack(int val);
 void i2c_master_stop(void);
-void initPWM(void);
 void initIMU(void);
 void i2c_read_multiple(char address, char reg, unsigned char * data, char length);
 unsigned char whoami(void);
+void LCD_data(unsigned char dat);
+void LCD_data16(unsigned short dat);
+void LCD_init();
+void LCD_drawPixel(unsigned short x, unsigned short y, unsigned short color);
+void LCD_setAddr(unsigned short x0, unsigned short y0, unsigned short x1, unsigned short y1);
+void LCD_clearScreen(unsigned short color);
 
 
 // Define DEVCFG registers
@@ -90,9 +95,6 @@ int main() {
     
     __builtin_enable_interrupts();
     
-    // PWM setup
-    initPWM();
-    
     // SPI1 setup
     initSPI1();
     
@@ -140,31 +142,7 @@ int main() {
      
 }
 
-void initPWM(void) {
-  // setup the PWM
-    RPB15Rbits.RPB15R = 0b0101;     // assign OC1 to pin B15
-    RPB8Rbits.RPB8R = 0b0101;       // assign OC2 to pin B8
-
-    // initialize PWM; frequency = 1kHz; duty cycle = 50%
-    T2CONbits.TCKPS = 0b011;        // timer prescaler N = 8
-    PR2 = 5999;                     // (PR2+1)N/48MHz = 1/1kHz
-    TMR2 = 0;                       // set timer2 to 0                    
-    T2CONbits.ON = 1;               // turn on timer2
-
-    OC1CONbits.OCTSEL = 0;          // set OC1 to use timer2
-    OC1CONbits.OCM = 0b110;         // PWM mode without fault pin; other OC1CON bits are defaults
-    OC1RS = 3000;                   // duty cycle = OC1RS/(PR2+1) = 50%
-    OC1R = 3000;                    // OC1R for just in case it rolls over
-    OC1CONbits.ON = 1;              // turn on OC1
-    
-    OC2CONbits.OCTSEL = 0;          // set OC2 to use timer2
-    OC2CONbits.OCM = 0b110;         // PWM mode without fault pin; other OC1CON bits are defaults
-    OC2RS = 3000;                   // duty cycle = OC1RS/(PR2+1) = 50%
-    OC2R = 3000;                    // OC2R for just in case it rolls over
-    OC2CONbits.ON = 1;              // turn on OC2
-}
-
-//////// SPI DAC initializations and functions ////////
+//////// SPI initializations and functions ////////
 
 // send a byte via spi and return the response
 unsigned char spi_io(unsigned char o) {
@@ -175,21 +153,23 @@ unsigned char spi_io(unsigned char o) {
     return SPI1BUF;             // read SPI1BUF
 }     
 
-// initialize spi1 and the ram module
+// initialize spi1 and the ram module for LCD
 void initSPI1(void) {
-    // set up the chip select pin (A0) as an output
-    // the chip select pin is used by the sram to indicate
     // when a command is beginning (clear CS to low) and when it
     // is ending (set CS high)
-    ANSELAbits.ANSA0 = 0;       // override AN0
-    TRISAbits.TRISA0 = 0;       // set A0 as an output
-    CS = 1;
+    // Master - SPI1, pins are: SDI1(B8), SDO1(A1), SCK1(B14), SS(B7), A0(B25)
     
-    // Pin functions, select a pin for SDI/SDO                                   
-    SDI1Rbits.SDI1R = 0;        // set A1 as SDI
-    RPA1Rbits.RPA1R = 0b0011;   // set SDO1 as A1  
-
-    // Master - SPI1, pins are: SDI(A1), SDO(), SCK1(25)
+    SDI1Rbits.SDI1R = 0b0100;   // B8 is SDI1
+    RPA1Rbits.RPA1R = 0b0011;   // A1 is SDO1
+    TRISBbits.TRISB7 = 0;       // SS is B7
+    LATBbits.LATB7 = 1;         // SS starts high
+    
+    // LCD requires an add'l pin to know if byte is a command or is data
+    // A0 / DAT pin (B15))
+    ANSELBbits.ANSB15 = 0;      // override B15 analog
+    TRISBbits.TRISB15 = 0;      // set B15 as an output
+    LATBbits.LATB15 = 0;        // set B15 low
+    
     // we manually control SS as a digital output 
     // since the pic is just starting, we know that spi is off. We rely on defaults here
 
@@ -205,25 +185,152 @@ void initSPI1(void) {
                 
 }
 
+//////// LCD initializations and functions ////////
+void LCD_command(unsigned char com) {
+    LATBbits.LATB15 = 0; // DAT
+    LATBbits.LATB7 = 0; // CS
+    spi_io(com);
+    LATBbits.LATB7 = 1; // CS
+}
 
-// function that takes 0-255 and tells SPI to output voltage 0-3.3V
-// Input directions:
-// char channel: 0(A) or 1(B)
-// char voltage: 000(0V) to 255(+3.3V))
-void setVoltage(unsigned char channel, unsigned char voltage) {
-    
-    short to_send = 0b0000000000000000;     // initialize short to be sent via spi_io
-    to_send |= voltage << 4;        // left shift the voltage data bits by 4
-    to_send |= (0b111 << 12);       // left shift the initialization data bits (BUF, GA, SHDN) by 12
-    to_send |= (channel << 15);     // left shift the channel select bit all the way (by 15)
-    
-    CS = 0;                         // select the SPI chip as slave
-    spi_io(to_send >> 8);           // send the first 8 bits to SDI (spi_io takes char which has 8 bits)
-    spi_io(to_send);                // send the remaining 8 bits to SDI   
-    CS = 1;                         // finish the command
-}  
-//////// END SPI DAC initializations and functions ////////
+void LCD_data(unsigned char dat) {
+    LATBbits.LATB15 = 1; // DAT
+    LATBbits.LATB7 = 0; // CS
+    spi_io(dat);
+    LATBbits.LATB7 = 1; // CS
+}
 
+void LCD_data16(unsigned short dat) {
+    LATBbits.LATB15 = 1; // DAT
+    LATBbits.LATB7 = 0; // CS
+    spi_io(dat>>8);
+    spi_io(dat);
+    LATBbits.LATB7 = 1; // CS
+}
+
+void LCD_init() {
+    int time = 0;
+    LCD_command(CMD_SWRESET);//software reset
+    time = _CP0_GET_COUNT();
+    while (_CP0_GET_COUNT() < time + 48000000/2/2) {} //delay(500);
+
+	LCD_command(CMD_SLPOUT);//exit sleep
+    time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/200) {} //delay(5);
+
+	LCD_command(CMD_PIXFMT);//Set Color Format 16bit
+	LCD_data(0x05);
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/200) {} //delay(5);
+
+	LCD_command(CMD_GAMMASET);//default gamma curve 3
+	LCD_data(0x04);//0x04
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/1000) {} //delay(1);
+
+	LCD_command(CMD_GAMRSEL);//Enable Gamma adj
+	LCD_data(0x01);
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/1000) {} //delay(1);
+
+	LCD_command(CMD_NORML);
+
+	LCD_command(CMD_DFUNCTR);
+	LCD_data(0b11111111);
+	LCD_data(0b00000110);
+
+    int i = 0;
+	LCD_command(CMD_PGAMMAC);//Positive Gamma Correction Setting
+	for (i=0;i<15;i++){
+		LCD_data(pGammaSet[i]);
+	}
+
+	LCD_command(CMD_NGAMMAC);//Negative Gamma Correction Setting
+	for (i=0;i<15;i++){
+		LCD_data(nGammaSet[i]);
+	}
+
+	LCD_command(CMD_FRMCTR1);//Frame Rate Control (In normal mode/Full colors)
+	LCD_data(0x08);//0x0C//0x08
+	LCD_data(0x02);//0x14//0x08
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/1000) {} //delay(1);
+
+	LCD_command(CMD_DINVCTR);//display inversion
+	LCD_data(0x07);
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/1000) {} //delay(1);
+
+	LCD_command(CMD_PWCTR1);//Set VRH1[4:0] & VC[2:0] for VCI1 & GVDD
+	LCD_data(0x0A);//4.30 - 0x0A
+	LCD_data(0x02);//0x05
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/1000) {} //delay(1);
+
+	LCD_command(CMD_PWCTR2);//Set BT[2:0] for AVDD & VCL & VGH & VGL
+	LCD_data(0x02);
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/1000) {} //delay(1);
+
+	LCD_command(CMD_VCOMCTR1);//Set VMH[6:0] & VML[6:0] for VOMH & VCOML
+	LCD_data(0x50);//0x50
+	LCD_data(99);//0x5b
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/1000) {} //delay(1);
+
+	LCD_command(CMD_VCOMOFFS);
+	LCD_data(0);//0x40
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/1000) {} //delay(1);
+
+	LCD_command(CMD_CLMADRS);//Set Column Address
+	LCD_data16(0x00);
+    LCD_data16(_GRAMWIDTH);
+
+	LCD_command(CMD_PGEADRS);//Set Page Address
+	LCD_data16(0x00);
+    LCD_data16(_GRAMHEIGH);
+
+	LCD_command(CMD_VSCLLDEF);
+	LCD_data16(0); // __OFFSET
+	LCD_data16(_GRAMHEIGH); // _GRAMHEIGH - __OFFSET
+	LCD_data16(0);
+
+	LCD_command(CMD_MADCTL); // rotation
+    LCD_data(0b00001000); // bit 3 0 for RGB, 1 for GBR, rotation: 0b00001000, 0b01101000, 0b11001000, 0b10101000
+
+	LCD_command(CMD_DISPON);//display ON
+	time = _CP0_GET_COUNT();
+	while (_CP0_GET_COUNT() < time + 48000000/2/1000) {} //delay(1);
+
+	LCD_command(CMD_RAMWR);//Memory Write
+}
+
+void LCD_drawPixel(unsigned short x, unsigned short y, unsigned short color) {
+    // check boundary
+    LCD_setAddr(x,y,x+1,y+1);
+    LCD_data16(color);
+}
+
+void LCD_setAddr(unsigned short x0, unsigned short y0, unsigned short x1, unsigned short y1) {
+    LCD_command(CMD_CLMADRS); // Column
+    LCD_data16(x0);
+	LCD_data16(x1);
+
+	LCD_command(CMD_PGEADRS); // Page
+	LCD_data16(y0);
+	LCD_data16(y1);
+
+	LCD_command(CMD_RAMWR); //Into RAM
+}
+
+void LCD_clearScreen(unsigned short color) {
+    int i;
+    LCD_setAddr(0,0,_GRAMWIDTH,_GRAMHEIGH);
+		for (i = 0;i < _GRAMSIZE; i++){
+			LCD_data16(color);
+		}
+}
 
 
 //////// I2C initializations and functions ////////

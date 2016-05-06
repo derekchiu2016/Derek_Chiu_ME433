@@ -1,5 +1,5 @@
 /* ************************************************************************** */
-// ME433 Homework 6
+// ME433 Test for Homework 6
 // Derek Chiu
 
 
@@ -11,7 +11,7 @@
 
 // Function prototypes
 unsigned char spi_io(unsigned char o);
-void initSPI1(void);
+void initSPI1();
 void setVoltage(unsigned char channel, unsigned char voltage);
 void i2c_master_setup(void);
 void i2c_master_start(void);
@@ -20,10 +20,12 @@ void i2c_master_send(unsigned char byte);
 unsigned char i2c_master_recv(void);
 void i2c_master_ack(int val);
 void i2c_master_stop(void);
-void initPWM(void);
+unsigned char whoAmI(void);
 void initIMU(void);
-void i2c_read_multiple(char address, char reg, unsigned char * data, char length);
-unsigned char whoami(void);
+// void i2c_read_multiple(char address, char reg, unsigned char * data, char length);
+void initPWM(void);
+unsigned char getAccel(void);
+
 
 
 // Define DEVCFG registers
@@ -91,7 +93,7 @@ int main() {
     __builtin_enable_interrupts();
     
     // PWM setup
-    initPWM();
+    initPWM(); 
     
     // SPI1 setup
     initSPI1();
@@ -99,46 +101,156 @@ int main() {
     // I2C setup
     i2c_master_setup();
     initIMU();
-
-
+    
+    
     while(1) {      
-
+        
         // HOMEWORK 6 IMU I2C
+
         
-        // set core timer to zero
-        // set it here so timer can run while below code executes
-         _CP0_SET_COUNT(0);
-               
-        unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
-        // input address for IMU, OUT_TEMP_L address, data array, and length
-        
-        i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
-        // NOTE: when using this function, POWER CYCLE the PIC (reset the power) to reset i2c_master_recv())
-        
-        // construct shorts from char using the dataIMU array (shift the H byte, or it with the L byte)
-        short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
-        short gyroX = ((dataIMU[2]) | (dataIMU[3] << 8));
-        short gyroY = ((dataIMU[4]) | (dataIMU[5] << 8));
-        short gyroZ = ((dataIMU[6]) | (dataIMU[7] << 8));
-        short accelX = ((dataIMU[8]) | (dataIMU[9] << 8));
-        short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
-        short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
-        
-        // scale the duty cycle depending on x and y accelerations
-        float duty1 = 3000.0*(accelX)/32000.0;
-        OC1RS = duty1 + 3000;
-        
-        float duty2 = 3000.0*(accelY)/32000.0;
-        OC2RS = duty2 + 3000;
-        
-        // delay to read at 50Hz
-        while(_CP0_GET_COUNT() < 480000) {
-                ;           // delay for 0.02s (24MHz * 0.02s = 480,000 ticks)
-        }  
-                             
+        // read from WHOAMI register to make sure connections and I2C code are OK
+        while (whoAmI() == 0b01101001) {
+            //OC1RS = 1000;
+            LATAbits.LATA4 = 0;
+            float duty1 = 3000.0*getAccel()/255.0;
+            OC1RS = duty1 + 3000;
+        }
+                    
     }
      
 }
+
+
+//////// I2C initializations and functions ////////
+
+// I2C Master utilities, 100 kHz, using polling rather than interrupts
+// The functions must be called in the correct order as per the I2C protocol
+// Change I2C1 to the I2C channel you are using
+// I2C pins need pull-up resistors, 2k-10k
+
+void i2c_master_setup(void) {
+    
+    // override the analog functionality of B2 and B3
+    ANSELBbits.ANSB2 = 0; 
+    ANSELBbits.ANSB3 = 0;
+    I2C2BRG = 233;                  // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 -- set baud to 100kHz
+    I2C2CONbits.ON = 1;             // turn on the I2C2 module
+}
+
+// I2C functions
+// Start a transmission on the I2C bus
+void i2c_master_start(void) {
+    I2C2CONbits.SEN = 1;            // send the start bit
+    while(I2C2CONbits.SEN) { ; }    // wait for the start bit to be sent
+}
+
+void i2c_master_restart(void) {     
+    I2C2CONbits.RSEN = 1;           // send a restart 
+    while(I2C2CONbits.RSEN) { ; }   // wait for the restart to clear
+}
+
+void i2c_master_send(unsigned char byte) { // send a byte to slave
+  I2C2TRN = byte;                   // if an address, bit 0 = 0 for write, 1 for read
+  while(I2C2STATbits.TRSTAT) { ; }  // wait for the transmission to finish
+  if(I2C2STATbits.ACKSTAT) {        // if this is high, slave has not acknowledged
+    // ("I2C2 Master: failed to receive ACK\r\n");
+  }
+}
+
+unsigned char i2c_master_recv(void) { // receive a byte from the slave
+    I2C2CONbits.RCEN = 1;             // start receiving data
+    while(!I2C2STATbits.RBF) { ; }    // wait to receive the data
+    return I2C2RCV;                   // read and return the data
+}
+
+void i2c_master_ack(int val) {        // sends ACK = 0 (slave should send another byte)
+                                      // or NACK = 1 (no more bytes requested from slave)
+    I2C2CONbits.ACKDT = val;          // store ACK/NACK in ACKDT
+    I2C2CONbits.ACKEN = 1;            // send ACKDT
+    while(I2C2CONbits.ACKEN) { ; }    // wait for ACK/NACK to be sent
+}
+
+void i2c_master_stop(void) {          // send a STOP:
+  I2C2CONbits.PEN = 1;                // comm is complete and master relinquishes bus
+  while(I2C2CONbits.PEN) { ; }        // wait for STOP to complete
+}
+
+// read from WHO_AM_I register to make sure initialization worked
+unsigned char whoAmI(void) {
+    i2c_master_start();
+    i2c_master_send(0b11010110);        // send IMU address and write
+    i2c_master_send(0x0F);              // who_AM_I register
+    i2c_master_restart();
+    i2c_master_send(0b11010111);        // send IMU address and read
+    char r = i2c_master_recv();         // save the value returned
+    i2c_master_ack(1);
+    i2c_master_stop();
+    return r;
+}
+
+unsigned char getAccel(void) {
+    i2c_master_start();
+    i2c_master_send(0b11010110);         
+    i2c_master_send(0x2A);
+    i2c_master_restart();
+    i2c_master_send(0b11010111);    
+    char r = i2c_master_recv();        
+    i2c_master_ack(1);
+    i2c_master_stop();
+    return r;
+}
+
+
+void initIMU(void) {
+    // setup the accelerometer
+    i2c_master_start();
+    i2c_master_send(0b11010110);        // send to IMU address and write
+    i2c_master_send(0x10);              // send to CTRL1_XL register (accelerometer)
+    i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 2g sensitivity, x filter
+    i2c_master_stop();
+    
+    // setup the gyro
+    i2c_master_start();
+    i2c_master_send(0b11010110);        // send to IMU address and write
+    i2c_master_send(0x11);              // send to CTRL2_G register (gyro)
+    i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 245 dps sensitivity, x filter
+    i2c_master_stop();
+    
+    // setup multi-read
+    i2c_master_start();
+    i2c_master_send(0b11010110);        // send to IMU address and write
+    i2c_master_send(0x12);              // send to CTRL3_C register (enable multi-read)
+    i2c_master_send(0b00000100);        // make IF_INC bit 1 to enable multi, but leave all others at default
+    i2c_master_stop();
+}
+  
+
+/*
+// function to read from multiple registers consecutively
+// char address: 7 bit chip address (0b11010110 for IMU chip)
+// char reg: the 1st register from which you want to start reading
+// unsigned char *data: a data array of length (length) defined in main: (e.g. dataIMU[length])
+// char length: the number of registers you want to read from
+void i2c_read_multiple(char address, char reg, unsigned char * data, char length) {
+    i2c_master_start();                          
+    i2c_master_send(address << 1);              // send address and write
+    i2c_master_send(reg);                       // send register address
+    i2c_master_restart;
+    i2c_master_send((address << 1) | 1);        // send address and read 
+     
+    // initiate a loop to consecutively read values from consecutive registers
+    int i;
+    for (i = 0; i < length-1; i++) {
+        data[i] = i2c_master_recv();            // store read value into array
+        i2c_master_ack(0);                      // ack 0 to continue reading
+    }
+
+    data[length-1] = i2c_master_recv();         // for last value, individually enter it into array 
+    i2c_master_ack(1);                          // so you can ack 1 and stop reading
+    i2c_master_stop();
+} */
+
+//////// END I2C initializations and functions ////////
 
 void initPWM(void) {
   // setup the PWM
@@ -176,7 +288,7 @@ unsigned char spi_io(unsigned char o) {
 }     
 
 // initialize spi1 and the ram module
-void initSPI1(void) {
+void initSPI1() {
     // set up the chip select pin (A0) as an output
     // the chip select pin is used by the sram to indicate
     // when a command is beginning (clear CS to low) and when it
@@ -225,121 +337,3 @@ void setVoltage(unsigned char channel, unsigned char voltage) {
 //////// END SPI DAC initializations and functions ////////
 
 
-
-//////// I2C initializations and functions ////////
-
-// I2C Master utilities, 100 kHz, using polling rather than interrupts
-// The functions must be called in the correct order as per the I2C protocol
-// Change I2C1 to the I2C channel you are using
-// I2C pins need pull-up resistors, 2k-10k
-
-void i2c_master_setup(void) {
-    
-    // override the analog functionality of B2 and B3
-    ANSELBbits.ANSB2 = 0; 
-    ANSELBbits.ANSB3 = 0;
-    
-    // set baud to 400 kHz
-    I2C2BRG = 233;                  // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 
-    I2C2CONbits.ON = 1;             // turn on the I2C2 module
-}
-
-// I2C functions
-// Start a transmission on the I2C bus
-void i2c_master_start(void) {
-    I2C2CONbits.SEN = 1;            // send the start bit
-    while(I2C2CONbits.SEN) { ; }    // wait for the start bit to be sent
-}
-
-void i2c_master_restart(void) {     
-    I2C2CONbits.RSEN = 1;           // send a restart 
-    while(I2C2CONbits.RSEN) { ; }   // wait for the restart to clear
-}
-
-void i2c_master_send(unsigned char byte) { // send a byte to slave
-  I2C2TRN = byte;                   // if an address, bit 0 = 0 for write, 1 for read
-  while(I2C2STATbits.TRSTAT) { ; }  // wait for the transmission to finish
-  if(I2C2STATbits.ACKSTAT) {        // if this is high, slave has not acknowledged
-    // ("I2C2 Master: failed to receive ACK\r\n");
-  }
-}
-
-unsigned char i2c_master_recv(void) { // receive a byte from the slave
-    I2C2CONbits.RCEN = 1;             // start receiving data
-    while(!I2C2STATbits.RBF) { ; }    // wait to receive the data
-    return I2C2RCV;                   // read and return the data
-}
-
-void i2c_master_ack(int val) {        // sends ACK = 0 (slave should send another byte)
-                                      // or NACK = 1 (no more bytes requested from slave)
-    I2C2CONbits.ACKDT = val;          // store ACK/NACK in ACKDT
-    I2C2CONbits.ACKEN = 1;            // send ACKDT
-    while(I2C2CONbits.ACKEN) { ; }    // wait for ACK/NACK to be sent
-}
-
-void i2c_master_stop(void) {          // send a STOP:
-  I2C2CONbits.PEN = 1;                // comm is complete and master relinquishes bus
-  while(I2C2CONbits.PEN) { ; }        // wait for STOP to complete
-}
-
-unsigned char whoami(void) {
-    i2c_master_start();                          
-    i2c_master_send(0b11010110);              // send address and write
-    i2c_master_send(0x0F);                       // send register address
-    i2c_master_restart;
-    i2c_master_send(0b11010111);        // send address and read 
-    char r = i2c_master_recv();
-    i2c_master_ack(1);                          // so you can ack 1 and stop reading
-    i2c_master_stop();
-    return r;
-}
-
-// turn on accelerometer, gyro and set sample rates; enable multiple register reading
-void initIMU(void) {
-    // setup the accelerometer
-    i2c_master_start();
-    i2c_master_send(0b11010110);        // send to IMU address and write
-    i2c_master_send(0x10);              // send to CTRL1_XL register (accelerometer)
-    i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 2g sensitivity, x filter
-    i2c_master_stop();
-    
-    // setup the gyro
-    i2c_master_start();
-    i2c_master_send(0b11010110);        // send to IMU address and write
-    i2c_master_send(0x11);              // send to CTRL2_G register (gyro)
-    i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 245 dps sensitivity, x filter
-    i2c_master_stop();
-    
-    // setup multi-read
-    i2c_master_start();
-    i2c_master_send(0b11010110);        // send to IMU address and write
-    i2c_master_send(0x12);              // send to CTRL3_C register (enable multi-read)
-    i2c_master_send(0b00000100);        // make IF_INC bit 1 to enable multi, but leave all others at default
-    i2c_master_stop();
-}
-
-// function to read from multiple registers consecutively
-// char address: 7 bit chip address (0b11010110 for IMU chip)
-// char reg: the 1st register from which you want to start reading
-// unsigned char *data: a data array of length (length) defined in main: (e.g. dataIMU[length])
-// char length: the number of registers you want to read from
-void i2c_read_multiple(char address, char reg, unsigned char * data, char length) {
-    i2c_master_start();                          
-    i2c_master_send(address << 1);              // send address and write
-    i2c_master_send(reg);                       // send register address
-    i2c_master_restart;
-    i2c_master_send((address << 1) | 1);        // send address and read 
-     
-    // initiate a loop to consecutively read values from consecutive registers
-    int i;
-    for (i = 0; i < length-1; i++) {
-        data[i] = i2c_master_recv();            // store read value into array
-        i2c_master_ack(0);                      // ack 0 to continue reading
-    }
-
-    data[length-1] = i2c_master_recv();         // for last value, individually enter it into array 
-    i2c_master_ack(1);                          // so you can ack 1 and stop reading
-    i2c_master_stop();
-}
-    
-//////// END I2C initializations and functions ////////
