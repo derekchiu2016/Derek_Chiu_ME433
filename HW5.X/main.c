@@ -23,6 +23,7 @@ void initIMU(void);
 void i2c_read_multiple(char address, char reg, unsigned char * data, char length);
 unsigned char whoami(void);
 void LCD_drawCharacter(unsigned short x, unsigned short y, char c);
+void LCD_drawArray(unsigned short x, unsigned short y, char *string);
 
 // Define DEVCFG registers
 // Refer to: /Microchip/xc32/v1.40/docs/config_docs/32mx250f128b.html
@@ -126,8 +127,15 @@ int main() {
 //        while(_CP0_GET_COUNT() < 480000) {
 //                ;           // delay for 0.02s (24MHz * 0.02s = 480,000 ticks)
 //        }  
+        
+        // reset the screen white 
         LCD_clearScreen(WHITE);
-        LCD_drawCharacter(124,120,'R');
+        
+        
+        char array[100];
+        sprintf(array, "Hello World! 1337");
+        // sprintf(array, "%b", accelX);
+        LCD_drawArray(28,32,array);
         
   
                              
@@ -300,7 +308,6 @@ void LCD_init() {
 }
 
 void LCD_drawPixel(unsigned short x, unsigned short y, unsigned short color) {
-    // check boundary
     LCD_setAddr(x,y,x+1,y+1);
     LCD_data16(color);
 }
@@ -325,10 +332,12 @@ void LCD_clearScreen(unsigned short color) {
 		}
 }
 
+// Takes input (x-coord, y-coord, 'L') where 'L' can be any letter (must be within '')
+// Only works if x and y are within screen bounds (limit is (123,120)
 void LCD_drawCharacter(unsigned short x, unsigned short y, char c) {
     int i;
     int j;
-    if ((x < 124) & (y < 121)) {
+    if ((x < 124) & (y < 121)) {                    // make sure coordinate is within screen bounds
         
         for (i = 0; i < 5; i++) {
         
@@ -349,10 +358,29 @@ void LCD_drawCharacter(unsigned short x, unsigned short y, char c) {
     
     }
     else {
-        LCD_clearScreen(RED);
+        LCD_clearScreen(RED);                   // if coordinates out of bounds, flash red
     }
     
+}
+
+// uses LCD_drawCharacter to write a string instead of individual characters
+void LCD_drawArray(unsigned short x, unsigned short y, char *string) {
+    int i = 0;
+    while (string[i]) {                     // enter loop as long as /0 hasn't been reached
+        LCD_drawCharacter(x,y,string[i]);   // print each character in the array
+        x = x + 7;                          // increment in x-direction
         
+        if (x > 123) {                      // if reach edge, roll back to start of next row
+            x = 0;
+            y = y + 10;
+        }
+        
+        if (y > 120) {                      // if reach bottom, roll back to top
+            y = 0;
+        }
+        
+        i++;
+    }
 }
 
 
