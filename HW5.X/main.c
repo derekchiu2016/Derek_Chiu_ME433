@@ -22,6 +22,7 @@ void i2c_master_stop(void);
 void initIMU(void);
 void i2c_read_multiple(char address, char reg, unsigned char * data, char length);
 unsigned char whoami(void);
+unsigned char getIMU(void);
 void LCD_drawCharacter(unsigned short x, unsigned short y, char c);
 void LCD_drawArray(unsigned short x, unsigned short y, char *string);
 
@@ -98,45 +99,53 @@ int main() {
     
     // LCD setup
     LCD_init();
+    // reset the screen white 
+    LCD_clearScreen(WHITE);
 
 
     while(1) {      
 
-//        // HOMEWORK 6 IMU I2C
-//        
-//        // set core timer to zero
-//        // set it here so timer can run while below code executes
-//         _CP0_SET_COUNT(0);
-//               
-//        unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
-//        // input address for IMU, OUT_TEMP_L address, data array, and length
-//        
-//        i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
-//        // NOTE: when using this function, POWER CYCLE the PIC (reset the power) to reset i2c_master_recv())
-//        
-//        // construct shorts from char using the dataIMU array (shift the H byte, or it with the L byte)
-//        short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
-//        short gyroX = ((dataIMU[2]) | (dataIMU[3] << 8));
-//        short gyroY = ((dataIMU[4]) | (dataIMU[5] << 8));
-//        short gyroZ = ((dataIMU[6]) | (dataIMU[7] << 8));
-//        short accelX = ((dataIMU[8]) | (dataIMU[9] << 8));
-//        short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
-//        short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
-//        
-//        // delay to read at 50Hz
-//        while(_CP0_GET_COUNT() < 480000) {
-//                ;           // delay for 0.02s (24MHz * 0.02s = 480,000 ticks)
-//        }  
+        /*
+        // HOMEWORK 6 IMU I2C
         
-        // reset the screen white 
-        LCD_clearScreen(WHITE);
+        // set core timer to zero
+        // set it here so timer can run while below code executes
+         _CP0_SET_COUNT(0);
+               
+        unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
+        // input address for IMU, OUT_TEMP_L address, data array, and length
+        
+        i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
+        // NOTE: when using this function, POWER CYCLE the PIC (reset the power) to reset i2c_master_recv())
+        
+        // construct shorts from char using the dataIMU array (shift the H byte, or it with the L byte)
+        short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
+        short gyroX = ((dataIMU[2]) | (dataIMU[3] << 8));
+        short gyroY = ((dataIMU[4]) | (dataIMU[5] << 8));
+        short gyroZ = ((dataIMU[6]) | (dataIMU[7] << 8));
+        short accelX = ((dataIMU[8]) | (dataIMU[9] << 8));
+        short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
+        short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
+        
+        // delay to read at 50Hz
+        while(_CP0_GET_COUNT() < 480000) {
+                ;           // delay for 0.02s (24MHz * 0.02s = 480,000 ticks)
+        }  
+        */
+
         
         
         char array[100];
-        sprintf(array, "Hello World! 1337");
-        // sprintf(array, "%b", accelX);
-        LCD_drawArray(28,32,array);
+        sprintf(array, "3c");
         
+        
+        
+//        sprintf(array,"%x",getIMU());
+        LCD_drawArray(1,1,array);
+        
+//        char arraytwo[100];
+//        sprintf(arraytwo,"%x",whoami());
+//        LCD_drawArray(5,5,arraytwo);
   
                              
     }
@@ -444,6 +453,18 @@ unsigned char whoami(void) {
     i2c_master_start();                          
     i2c_master_send(0b11010110);              // send address and write
     i2c_master_send(0x0F);                       // send register address
+    i2c_master_restart;
+    i2c_master_send(0b11010111);        // send address and read 
+    char r = i2c_master_recv();
+    i2c_master_ack(1);                          // so you can ack 1 and stop reading
+    i2c_master_stop();
+    return r;
+}
+
+unsigned char getIMU(void) {
+    i2c_master_start();                          
+    i2c_master_send(0b11010110);              // send address and write
+    i2c_master_send(0x10);                       // send register address
     i2c_master_restart;
     i2c_master_send(0b11010111);        // send address and read 
     char r = i2c_master_recv();
