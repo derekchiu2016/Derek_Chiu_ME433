@@ -1,5 +1,5 @@
 /* ************************************************************************** */
-// ME433 Homework 5
+// ME433 Homework #5
 // Derek Chiu
 
 
@@ -19,12 +19,30 @@ void i2c_master_send(unsigned char byte);
 unsigned char i2c_master_recv(void);
 void i2c_master_ack(int val);
 void i2c_master_stop(void);
-void initIMU(void);
-void i2c_read_multiple(char address, char reg, unsigned char * data, char length);
-unsigned char whoami(void);
-unsigned char getIMU(void);
+void i2c_sendReg(char,char*,char);
+void i2c_readReg(char,char,char*,char);
 void LCD_drawCharacter(unsigned short x, unsigned short y, char c);
 void LCD_drawArray(unsigned short x, unsigned short y, char *string);
+
+#define LSM6 0b1101011
+#define WHOAMI 0x0F
+#define CTRL1_XL 0x10
+#define CTRL2_G 0x11
+#define CTRL3_C 0x12
+#define OUT_TEMP_L 0x20
+#define OUT_TEMP_H 0x21
+#define OUTX_L_G 0x22
+#define OUTX_H_G 0x23
+#define OUTY_L_G 0x24
+#define OUTY_H_G 0x25
+#define OUTZ_L_G 0x26
+#define OUTZ_H_G 0x27
+#define OUTX_L_XL 0x28
+#define OUTX_H_XL 0x29
+#define OUTY_L_XL 0x2A
+#define OUTY_H_XL 0x2B
+#define OUTZ_L_XL 0x2C
+#define OUTZ_H_XL 0x2D
 
 // Define DEVCFG registers
 // Refer to: /Microchip/xc32/v1.40/docs/config_docs/32mx250f128b.html
@@ -59,8 +77,8 @@ void LCD_drawArray(unsigned short x, unsigned short y, char *string);
 
 // DEVCFG3
 #pragma config USERID = 0 // some 16bit userid, doesn't matter what
-#pragma config PMDL1WAY = OFF // allow multiple reconfigurations
-#pragma config IOL1WAY = OFF // allow multiple reconfigurations
+#pragma config PMDL1WAY = ON // allow multiple reconfigurations
+#pragma config IOL1WAY = ON // allow multiple reconfigurations
 #pragma config FUSBIDIO = ON // USB pins controlled by USB module
 #pragma config FVBUSONIO = ON // USB BUSON controlled by USB module
 
@@ -94,59 +112,96 @@ int main() {
     initSPI1();
     
     // I2C setup
+    ANSELBbits.ANSB2 = 0;
+    ANSELBbits.ANSB3 = 0;
     i2c_master_setup();
-    initIMU();
+
+    char vals[2];
+    vals[0] = CTRL1_XL; // accel
+    vals[1] = 0x80; // ODR = 1000 (1.66 kHz (high performance)); FS_XL = 00 (+/-2 g full scale)
+    i2c_sendReg(LSM6,vals,2);
+
+    vals[0] = CTRL2_G; // Gyro
+    vals[1] = 0x80; // ODR = 1000 (1.66 kHz (high performance)); FS_XL = 00 (245 dps)
+    i2c_sendReg(LSM6,vals,2);
+
+    vals[0] = CTRL3_C;
+    vals[1] = 0x04; // IF_INC = 1 (automatically increment register address)
+    i2c_sendReg(LSM6,vals,2);
+    
+    char readings[14];
+    short temperature;
+    short accX;
+    short accY;
+    short accZ;
+    short gyroX;
+    short gyroY;
+    short gyroZ;
     
     // LCD setup
     LCD_init();
-    // reset the screen white 
     LCD_clearScreen(WHITE);
-
-
+    
+    char who[1];
+    i2c_readReg(LSM6,WHOAMI,who,1);
+        
     while(1) {      
 
-        /*
+        
         // HOMEWORK 6 IMU I2C
         
         // set core timer to zero
         // set it here so timer can run while below code executes
          _CP0_SET_COUNT(0);
+         
+        char array[100];
+        sprintf(array, "Hello World! 1337");
+        LCD_drawArray(1,1,array);
                
-        unsigned char dataIMU[14];          // length of dataIMU should be the same as length in function below
-        // input address for IMU, OUT_TEMP_L address, data array, and length
-        
-        i2c_read_multiple(0b1101011, 0x20, dataIMU, 14);
-        // NOTE: when using this function, POWER CYCLE the PIC (reset the power) to reset i2c_master_recv())
-        
-        // construct shorts from char using the dataIMU array (shift the H byte, or it with the L byte)
-        short temperature = ((dataIMU[0]) | (dataIMU[1] << 8));
-        short gyroX = ((dataIMU[2]) | (dataIMU[3] << 8));
-        short gyroY = ((dataIMU[4]) | (dataIMU[5] << 8));
-        short gyroZ = ((dataIMU[6]) | (dataIMU[7] << 8));
-        short accelX = ((dataIMU[8]) | (dataIMU[9] << 8));
-        short accelY = ((dataIMU[10]) | (dataIMU[11] << 8));
-        short accelZ = ((dataIMU[12]) | (dataIMU[13] << 8));
+        i2c_readReg(LSM6,OUT_TEMP_L,readings,14);
+
+        temperature = readings[1] << 8 | readings[0];
+        gyroX = readings[3] << 8 | readings[2];
+        gyroY = readings[5] << 8 | readings[4];
+        gyroZ = readings[7] << 8 | readings[6];
+        accX = readings[9] << 8 | readings[8];
+        accY = readings[11] << 8 | readings[10];
+        accZ = readings[13] << 8 | readings[12];
         
         // delay to read at 50Hz
         while(_CP0_GET_COUNT() < 480000) {
                 ;           // delay for 0.02s (24MHz * 0.02s = 480,000 ticks)
         }  
-        */
-
+        
+        sprintf(array,"%x",who[0]);
+        LCD_drawArray(1,15,array);
+        
+        sprintf(array,"%d",accX);
+        LCD_drawArray(1,25,array);
+        
+        sprintf(array,"Accel X");
+        LCD_drawArray(50,25,array);
+        
+        sprintf(array,"%d",accY);
+        LCD_drawArray(1,35,array);
+        
+        sprintf(array,"%d",gyroX);
+        LCD_drawArray(1,45,array);
+        
+        sprintf(array,"%d",temperature);
+        LCD_drawArray(1,55,array);
         
         
-        char array[100];
-        sprintf(array, "3c");
+        
+        
+//        i2c_readReg(LSM6,WHOAMI,who,1);
+//        sprintf(array,"%x",who);
+//        LCD_drawArray(1,25,array);
         
         
         
-//        sprintf(array,"%x",getIMU());
-        LCD_drawArray(1,1,array);
         
-//        char arraytwo[100];
-//        sprintf(arraytwo,"%x",whoami());
-//        LCD_drawArray(5,5,arraytwo);
-  
+        
                              
     }
      
@@ -366,6 +421,7 @@ void LCD_drawCharacter(unsigned short x, unsigned short y, char c) {
         }
     
     }
+    
     else {
         LCD_clearScreen(RED);                   // if coordinates out of bounds, flash red
     }
@@ -389,7 +445,9 @@ void LCD_drawArray(unsigned short x, unsigned short y, char *string) {
         }
         
         i++;
+        
     }
+    
 }
 
 
@@ -401,13 +459,8 @@ void LCD_drawArray(unsigned short x, unsigned short y, char *string) {
 // I2C pins need pull-up resistors, 2k-10k
 
 void i2c_master_setup(void) {
-    
-    // override the analog functionality of B2 and B3
-    ANSELBbits.ANSB2 = 0; 
-    ANSELBbits.ANSB3 = 0;
-    
-    // set baud to 400 kHz
-    I2C2BRG = 233;                  // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 
+    // set baud to 100 kHz
+    I2C2BRG = 233;               // I2CBRG = [1/(2*100kHz) - 104ns]*48MHz - 2 
     I2C2CONbits.ON = 1;             // turn on the I2C2 module
 }
 
@@ -425,7 +478,7 @@ void i2c_master_restart(void) {
 
 void i2c_master_send(unsigned char byte) { // send a byte to slave
   I2C2TRN = byte;                   // if an address, bit 0 = 0 for write, 1 for read
-  while(I2C2STATbits.TRSTAT) { ; }  // wait for the transmission to finish
+  while(I2C2STATbits.TRSTAT) { ; }  // wait for the transmission to finish  
   if(I2C2STATbits.ACKSTAT) {        // if this is high, slave has not acknowledged
     // ("I2C2 Master: failed to receive ACK\r\n");
   }
@@ -449,76 +502,32 @@ void i2c_master_stop(void) {          // send a STOP:
   while(I2C2CONbits.PEN) { ; }        // wait for STOP to complete
 }
 
-unsigned char whoami(void) {
-    i2c_master_start();                          
-    i2c_master_send(0b11010110);              // send address and write
-    i2c_master_send(0x0F);                       // send register address
-    i2c_master_restart;
-    i2c_master_send(0b11010111);        // send address and read 
-    char r = i2c_master_recv();
-    i2c_master_ack(1);                          // so you can ack 1 and stop reading
-    i2c_master_stop();
-    return r;
-}
-
-unsigned char getIMU(void) {
-    i2c_master_start();                          
-    i2c_master_send(0b11010110);              // send address and write
-    i2c_master_send(0x10);                       // send register address
-    i2c_master_restart;
-    i2c_master_send(0b11010111);        // send address and read 
-    char r = i2c_master_recv();
-    i2c_master_ack(1);                          // so you can ack 1 and stop reading
-    i2c_master_stop();
-    return r;
-}
-
-// turn on accelerometer, gyro and set sample rates; enable multiple register reading
-void initIMU(void) {
-    // setup the accelerometer
-    i2c_master_start();
-    i2c_master_send(0b11010110);        // send to IMU address and write
-    i2c_master_send(0x10);              // send to CTRL1_XL register (accelerometer)
-    i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 2g sensitivity, x filter
-    i2c_master_stop();
-    
-    // setup the gyro
-    i2c_master_start();
-    i2c_master_send(0b11010110);        // send to IMU address and write
-    i2c_master_send(0x11);              // send to CTRL2_G register (gyro)
-    i2c_master_send(0b10000000);        // sample rate 1.66 kHz, 245 dps sensitivity, x filter
-    i2c_master_stop();
-    
-    // setup multi-read
-    i2c_master_start();
-    i2c_master_send(0b11010110);        // send to IMU address and write
-    i2c_master_send(0x12);              // send to CTRL3_C register (enable multi-read)
-    i2c_master_send(0b00000100);        // make IF_INC bit 1 to enable multi, but leave all others at default
-    i2c_master_stop();
-}
-
-// function to read from multiple registers consecutively
-// char address: 7 bit chip address (0b11010110 for IMU chip)
-// char reg: the 1st register from which you want to start reading
-// unsigned char *data: a data array of length (length) defined in main: (e.g. dataIMU[length])
-// char length: the number of registers you want to read from
-void i2c_read_multiple(char address, char reg, unsigned char * data, char length) {
-    i2c_master_start();                          
-    i2c_master_send(address << 1);              // send address and write
-    i2c_master_send(reg);                       // send register address
-    i2c_master_restart;
-    i2c_master_send((address << 1) | 1);        // send address and read 
-     
-    // initiate a loop to consecutively read values from consecutive registers
+void i2c_sendReg(char address, char * values, char len) {
     int i;
-    for (i = 0; i < length-1; i++) {
-        data[i] = i2c_master_recv();            // store read value into array
-        i2c_master_ack(0);                      // ack 0 to continue reading
+    i2c_master_start();
+    i2c_master_send(address<<1);
+    for (i=0;i<len;i++) {
+        i2c_master_send(values[i]);
     }
-
-    data[length-1] = i2c_master_recv();         // for last value, individually enter it into array 
-    i2c_master_ack(1);                          // so you can ack 1 and stop reading
     i2c_master_stop();
 }
-    
+
+void i2c_readReg(char address, char reg, char * values,char len) {
+    int i = 0;
+
+    i2c_master_start();
+    i2c_master_send(address<<1);
+    i2c_master_send(reg);
+    i2c_master_restart();
+    i2c_master_send((address<<1)|1);
+    for (i=0;i<len;i++) {
+        values[i] = i2c_master_recv();
+        if (i<len-1) {
+            i2c_master_ack(0);
+        }
+    }
+    i2c_master_ack(1);
+    i2c_master_stop();
+}
+
 //////// END I2C initializations and functions ////////
