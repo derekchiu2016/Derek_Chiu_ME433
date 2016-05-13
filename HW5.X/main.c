@@ -24,6 +24,8 @@ void i2c_readReg(char,char,char*,char);
 void LCD_drawCharacter(unsigned short x, unsigned short y, char c);
 void LCD_drawArray(unsigned short x, unsigned short y, char *string);
 
+
+// define IMU registers
 #define LSM6 0b1101011
 #define WHOAMI 0x0F
 #define CTRL1_XL 0x10
@@ -116,6 +118,7 @@ int main() {
     ANSELBbits.ANSB3 = 0;
     i2c_master_setup();
 
+    // IMU setup (Acceleration, Gyro, Read multiple)
     char vals[2];
     vals[0] = CTRL1_XL; // accel
     vals[1] = 0x80; // ODR = 1000 (1.66 kHz (high performance)); FS_XL = 00 (+/-2 g full scale)
@@ -129,6 +132,7 @@ int main() {
     vals[1] = 0x04; // IF_INC = 1 (automatically increment register address)
     i2c_sendReg(LSM6,vals,2);
     
+    // define shorts to store IMU readings
     char readings[14];
     short temperature;
     short accX;
@@ -140,15 +144,16 @@ int main() {
     
     // LCD setup
     LCD_init();
-    LCD_clearScreen(WHITE);
+    LCD_clearScreen(WHITE);     // clear the screen
     
+    // WHOAMI register should return 0x69 
     char who[1];
     i2c_readReg(LSM6,WHOAMI,who,1);
         
     while(1) {      
 
         
-        // HOMEWORK 6 IMU I2C
+        // HOMEWORK 5 LCD
         
         // set core timer to zero
         // set it here so timer can run while below code executes
@@ -157,9 +162,11 @@ int main() {
         char array[100];
         sprintf(array, "Hello World! 1337");
         LCD_drawArray(1,1,array);
-               
+        
+        // start reading from registers starting at OUT_TEMP_L
         i2c_readReg(LSM6,OUT_TEMP_L,readings,14);
-
+        
+        // combine chars into shorts
         temperature = readings[1] << 8 | readings[0];
         gyroX = readings[3] << 8 | readings[2];
         gyroY = readings[5] << 8 | readings[4];
@@ -190,19 +197,7 @@ int main() {
         
         sprintf(array,"%d",temperature);
         LCD_drawArray(1,55,array);
-        
-        
-        
-        
-//        i2c_readReg(LSM6,WHOAMI,who,1);
-//        sprintf(array,"%x",who);
-//        LCD_drawArray(1,25,array);
-        
-        
-        
-        
-        
-                             
+                                     
     }
      
 }
