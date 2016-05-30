@@ -21,9 +21,6 @@ public class MainActivity extends AppCompatActivity {
 
         setMyControlListener();
 
-        myTextView.setText("The value is: "+progress);
-
-
     }
 
     private void setMyControlListener() {
@@ -34,7 +31,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 progressChanged = progress;
+                myTextView.setText("The value is: "+progress);
             }
+
+
 
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {
