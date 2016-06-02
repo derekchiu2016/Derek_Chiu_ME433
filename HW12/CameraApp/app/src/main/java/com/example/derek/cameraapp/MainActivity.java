@@ -17,6 +17,8 @@ import java.io.IOException;
 import static android.graphics.Color.blue;
 import static android.graphics.Color.green;
 import static android.graphics.Color.red;
+import static android.graphics.Color.rgb;
+
 import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 
@@ -62,7 +64,7 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         mCamera = Camera.open();
         Camera.Parameters parameters = mCamera.getParameters();
         parameters.setPreviewSize(640, 480);
-        parameters.setColorEffect(Camera.Parameters.EFFECT_MONO); // black and white
+        //parameters.setColorEffect(Camera.Parameters.EFFECT_MONO); // black and white
         parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_INFINITY); // no autofocusing
         mCamera.setParameters(parameters);
         mCamera.setDisplayOrientation(90); // rotate to portrait mode
@@ -94,32 +96,52 @@ public class MainActivity extends Activity implements TextureView.SurfaceTexture
         if (c != null) {
 
             int[] pixels = new int[bmp.getWidth()];
-            // ADD A SLIDER BAR TO CHANGE startY
-            int startY = 450; // which row in the bitmap to analyse to read
+            int startY = 200; // which row in the bitmap to analyse to read
             // only look at one row in the image
+
+            int[] thresholdedColors = new int[bmp.getWidth()];
+            int thresh = myControl.getProgress()*255/100;
+
             bmp.getPixels(pixels, 0, bmp.getWidth(), 0, startY, bmp.getWidth(), 1); // (array name, offset inside array, stride (size of row), start x, start y, num pixels to read per row, num rows to read)
 
             // pixels[] is the RGBA data (in black an white).
             // instead of doing center of mass on it, decide if each pixel is dark enough to consider black or white
             // then do a center of mass on the thresholded array
             int[] thresholdedPixels = new int[bmp.getWidth()];
+
             int wbTotal = 0; // total mass
             int wbCOM = 0; // total (mass time position)
-            for (int i = 0; i < bmp.getWidth(); i++) {
-                // sum the red, green and blue, subtract from 255 to get the darkness of the pixel.
-                // if it is greater than some value (600 here), consider it black
-                // play with the 600 value if you are having issues reliably seeing the line
-                int sliderscaler = myControl.getProgress()/50;
-                if (255*3-(red(pixels[i])+green(pixels[i])+blue(pixels[i])) > 600*sliderscaler) {
-                    // ADD A SLIDER BAR TO CHANGE THRESHOLD
-                    thresholdedPixels[i] = 255*3;
+
+            for(int j=0; j<220;j++) {
+
+                startY = startY+1;
+                bmp.getPixels(pixels, 0, bmp.getWidth(), 0, startY, bmp.getWidth(), 1);
+                wbTotal = 0;
+                wbCOM = 0;
+
+                for (int i = 0; i < bmp.getWidth(); i++) {
+
+                    //int sliderscaler = myControl.getProgress()/50;
+
+                    // sum the red, green and blue, subtract from 255 to get the darkness of the pixel.
+                    // if it is greater than some value (600 here), consider it black
+                    // play with the 600 value if you are having issues reliably seeing the line
+                    if (255-(green(pixels[i])-red(pixels[i])) > thresh) {
+                        thresholdedColors[i] = rgb(0, 0, 0);
+                        thresholdedPixels[i] = 255;
+                        // thresholdedPixels[i] = 255*3;
+                    }
+                    else {
+                        thresholdedColors[i] = rgb(0, 255, 0);
+                        thresholdedPixels[i] = 0;
+                    }
+                    wbTotal = wbTotal + thresholdedPixels[i];
+                    wbCOM = wbCOM + thresholdedPixels[i]*i;
                 }
-                else {
-                    thresholdedPixels[i] = 0;
-                }
-                wbTotal = wbTotal + thresholdedPixels[i];
-                wbCOM = wbCOM + thresholdedPixels[i]*i;
+                bmp.setPixels(thresholdedColors, 0, bmp.getWidth(), 0, startY, bmp.getWidth(), 1);
+
             }
+
             int COM;
             //watch out for divide by 0
             if (wbTotal<=0) {
