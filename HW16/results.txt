@@ -1,0 +1,10 @@
+How the robot works:
+1 slider was used to adjust the thresholding value to identify RGB.  
+The Android CDC app sent the COM value to the PIC.
+The PIC used the COM value to adjust the PWM outputs using a series of if/else if statements.  
+For example, if the COM is low (on the left side of the screen), make the PWM controlling the right wheel
+higher to make the robot turn left.
+If the COM is an intermediate value (320), set both PWMs equal to each other.
+
+On the hardware side, a weight was added towards the front of the robot to move the center of mass
+and increase the normal force between the wheels and the ground, providing greater friction.
